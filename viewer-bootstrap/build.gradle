@@ -1,0 +1,18 @@
+plugins { id 'java' }
+version='0.2.0'
+repositories { mavenCentral() }
+dependencies {
+    implementation project(':relay-core')
+    implementation 'com.google.code.gson:gson:2.11.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+}
+tasks.withType(JavaCompile).configureEach { options.release=21; options.encoding='UTF-8' }
+test { useJUnitPlatform(); testLogging { events 'passed','failed','skipped' } }
+jar {
+    manifest { attributes 'Main-Class':'tw.handoff.viewer.bootstrap.ViewerMain' }
+    duplicatesStrategy=DuplicatesStrategy.EXCLUDE
+    from { configurations.runtimeClasspath.collect { it.isDirectory()?it:zipTree(it) } }
+    exclude 'module-info.class','META-INF/versions/**/module-info.class','META-INF/*.SF','META-INF/*.RSA','META-INF/*.DSA'
+    preserveFileTimestamps=false;reproducibleFileOrder=true
+}

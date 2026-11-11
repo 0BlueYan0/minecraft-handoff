@@ -8,3 +8,7 @@ pluginManagement {
 rootProject.name = 'minecraft-handoff'
 include 'launcher-helper'
 include 'runtime-agent'
+include 'relay-core'
+include 'relay-bridge'
+include 'viewer-mod'
+include 'viewer-bootstrap'

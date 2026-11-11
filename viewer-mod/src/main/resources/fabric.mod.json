@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"handoff_viewer","version":"0.2.0","name":"Handoff Viewer Guard","environment":"client","entrypoints":{"client":["tw.handoff.viewer.ViewerClient"]},"mixins":["handoff-viewer.mixins.json"],"depends":{"fabricloader":">=0.20.1","minecraft":"1.21.4","java":">=21","fabric-api":"*"}}

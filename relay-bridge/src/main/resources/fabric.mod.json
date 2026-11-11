@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"handoff_relay","version":"0.2.0","name":"Handoff Native Bridge","environment":"client","depends":{"fabricloader":">=0.20.1","minecraft":"1.21.4","java":">=21","fabric-api":"*"}}
