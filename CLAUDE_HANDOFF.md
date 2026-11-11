@@ -159,7 +159,13 @@ NativeCapture會檢查same-user/PID、實際gameDirectory、player/level非null�
     | sao-dungeons-companion | `saodungeons:region` | 有`REQUEST_STATE`常數，呼叫者沒查 | JOIN時送HELLO，區域編輯用 |
     | saoblessing | `saoblessing`的MessagingManager | 沒有，只有回應`SERVER_HELLO`的HELLO，`OFFER_OPEN`是伺服器推送 | 同SAOUI的INIT |
 
-    還沒看的：fracturedwar（約20種`*_REQUEST`，像`MAIN_MENU_REQUEST`、`ARMY_REQUEST`）、z-plugin-companion（`MENU_REQUEST`、`CATALOG_REQUEST`、`ROSTER_REQUEST`）、zap-dialogue-client、zap-ui-companion、sao-ui-lib，這幾個都有C2S註冊。relmod、saolabyrinth-companion、sao-post-companion、meg、trueinvisibility沒有找到請求字串。
+    | fracturedwar | `war:main` | `MAIN_MENU_REQUEST`等約20種`*_REQUEST` | 開選單時`requestMainMenu`，HELLO只回應`SERVER_HELLO` |
+    | z-plugin-companion（saocharacters） | 多個saocharacters通道 | 表情`CATALOG_REQUEST`：世界內每100 tick檢查一次，目錄空的就自動要，JOIN與DISCONNECT會清空。角色選擇畫面每50 tick送`ROSTER_REQUEST`。選單`OPEN` | viewer加入後自動補，不用額外處理 |
+    | zap-ui-companion | `zapui:open`、`zapui:update`、`zapui:action` | 沒有，open與update是伺服器推送，action是玩家操作 | 伺服器推送的介面 |
+    | sao-ui-lib | 無自己的通道 | 不適用，是altarmod與companionsmod共用的`JsonChannel`程式庫 | |
+    | zap-dialogue-client | 沒查到 | Vineflower沒輸出原始碼，只從字串看到`DIALOGUE_OPEN`、`NOTIFICATION_OPEN`、`OPTION_OPEN`，推論是伺服器推送 | |
+
+    relmod、saolabyrinth-companion、sao-post-companion、meg、trueinvisibility沒有找到請求字串。
   - Mux `:hello`（伺服器送）會跑`HELLO_LISTENERS`，cinematic、kobold、memorylaby、ServerClock等在這時各自送HELLO。daily、mail、redeem、guild、shop、bugreport也有HELLO。大約50個`Mux.open/ops/openRaw`通道，很多系統有`OPEN`/`LIST`/`STATE`操作（auctions、mounts、mail、echos、daily、dungeon、cosmetics等），是不是「要求重送」要逐個看。
 - 審查：Sonnet兩輪皆PASS（`.herdr-work/v14/review-1.md`、`review-2.md`），建議已修。2026-11-12 補了QuestHud NaN的`SaoSnapshot`端到端還原測試（test下照2.51.13反編譯加了QuestHudPayload/State/Kind/Anchor/Style假類別，Style只取2個component），使用者選不開reviewer，主對話自查。
 
