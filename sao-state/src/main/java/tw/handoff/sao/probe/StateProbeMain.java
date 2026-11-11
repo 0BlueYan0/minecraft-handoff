@@ -5,10 +5,10 @@ import java.util.*;
 import java.nio.charset.StandardCharsets;
 /** Read-only game state capture. No relay listener, input interception, or server packets. */
 public final class StateProbeMain {
- public static void main(String[] args){try{System.exit(run(args));}catch(Exception|LinkageError error){System.out.println("CAPTURE_FAILED:"+error.getClass().getSimpleName());System.exit(1);}}
+ public static void main(String[] args){try{System.exit(run(args));}catch(Exception|LinkageError error){System.out.println("CAPTURE_FAILED:"+error.getClass().getSimpleName()+":main"+StateProbeAgent.detail(error));System.exit(1);}}
  private static int run(String[] args)throws Exception{
-  if(args.length!=6||!args[0].equals("--pid")||!args[2].equals("--game-dir")||!args[4].equals("--out"))throw new IllegalArgumentException();
-  long pid=Long.parseLong(args[1]);var target=ProcessHandle.of(pid).orElseThrow();if(pid==ProcessHandle.current().pid()||!target.info().user().orElse("").equals(ProcessHandle.current().info().user().orElseThrow()))throw new IllegalArgumentException();
+  if(args.length!=6||!args[0].equals("--pid")||!args[2].equals("--game-dir")||!args[4].equals("--out"))throw new IllegalArgumentException("Usage --pid N --game-dir DIR --out FILE");
+  long pid=Long.parseLong(args[1]);var target=ProcessHandle.of(pid).orElseThrow();if(pid==ProcessHandle.current().pid()||!target.info().user().orElse("").equals(ProcessHandle.current().info().user().orElseThrow()))throw new IllegalArgumentException("Target must be another process of the same user");
   Path game=Path.of(args[3]).toRealPath(),out=Path.of(args[5]).toAbsolutePath().normalize();Files.createDirectories(out.getParent());out=out.getParent().toRealPath().resolve(out.getFileName());
   if(out.startsWith(game)||Files.exists(out,LinkOption.NOFOLLOW_LINKS))throw new IllegalArgumentException("Use a new local output outside the game instance");
   Path temp=Files.createTempDirectory("handoff-sao-readonly-");Path status=Files.createFile(temp.resolve("status"));Path self=Path.of(StateProbeMain.class.getProtectionDomain().getCodeSource().getLocation().toURI());Path copy=temp.resolve("probe.jar");Files.copy(self,copy);

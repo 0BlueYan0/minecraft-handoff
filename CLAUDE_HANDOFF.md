@@ -131,7 +131,18 @@ JAR：`sao-state/build/libs/sao-state-0.3.0.jar`。入口`tw.handoff.sao.probe.S
 
 NativeCapture會檢查same-user/PID、實際gameDirectory、player/level非null、精確SAO artifact hash。從原MC Executor排程。最新agent參數為4個base64欄位：status、gameDir、output、該次immutable probe JAR；每次使用當次image建立child loader，避免之後更新工具卻一直跑首次JAR。
 
-**實際已進服的正式帳號資料尚未capture。** 使用者已說伺服器進不去，請等恢復。下一次只需請他用原啟動器進服並保持開啟，先讀baseline counts；如有欄位未載入，再請他開角色／裝備／任務畫面後對照。先不用要求施放技能或改動裝備。
+**2026-11-11/12 實服只讀擷取已完成（Claude）。** 遊戲PID79996，每次擷取前後都正常回應。檔案在ignored `work/live-state-20261111-*.json`，含角色資料，不提交。
+
+| 時機 | 結果 |
+|---|---|
+| 大廳排隊（baseline2） | mux30、其他0、equipment未載入 |
+| 世界內、開過裝備／技能／任務畫面（world5） | mux100、allSkills0、cooldowns2、questHUD2（羅盤＋文字）、equipment已載入（12格、19項stats、6組lists、presets）、party無隊員 |
+
+- 第一次世界內擷取失敗：`quests.targetAngleDegrees`是`Float.NaN`（SAO預設值，代表無目標方向）。`StateValues`改成非有限float/double以字串`"NaN"`/`"Infinity"`/`"-Infinity"`保存，只有浮點欄位接受。冷卻／持續時間若非有限，擷取時就以`skills.cooldowns: non-finite timer`失敗（還原時`CooldownAge`本來就拒絕）。
+- 遊戲JVM會保留第一次附加時的`StateProbeAgent`類別（推論，與現象一致），舊agentmain只寫例外類別名。所以`NativeCapture.capture`自己寫失敗訊息並正常返回；訊息帶欄位路徑，經`StateProbeAgent.detail`清洗（只留`[A-Za-z0-9_.$#:, -]`、300字）。
+- `mux.sendable`在世界內仍是null：`Mux.hello`只在HELLO帶`outgoing`陣列時設定，實服HELLO沒帶；SERVED有100個，HELLO確實收到。
+- SAO有客戶端要求重送狀態的封包（只查了97個選定classes）：Equipment `OPEN`/`PRESETS`/`LIST`、Party `OPEN`、`SaoUiMessaging.requestResync`送簽章的`MOB_HB_RESYNC`。技能與任務HUD在這97個classes裡沒找到重送封包，不代表整個jar沒有。這支持「viewer加入時請伺服器重送」的方向，但簽章訊息viewer能否送出未查。
+- 審查：Sonnet兩輪皆PASS（`.herdr-work/v14/review-1.md`、`review-2.md`），建議已修；未做的建議是QuestHud NaN的`SaoSnapshot`端到端還原測試（test下沒有QuestHudPayload/State假類別）。
 
 ## 測試與審查
 
@@ -139,7 +150,7 @@ NativeCapture會檢查same-user/PID、實際gameDirectory、player/level非null�
 
 | 範圍 | 最新結果 |
 |---|---|
-| sao-state | 28 tests，0 failure/error/skip（2026-11-11 改成契約類別指紋，新增`VersionContractTest`5項）；`ArtifactContractTest`用2.51.13與2.51.14兩個真JAR各跑一次，指紋都等於常數；Sonnet reviewer判PASS（`.herdr-work/v14/review-1.md`），建議已修 |
+| sao-state | 32 tests，0 failure/error/skip（2026-11-12 加NaN編碼、失敗訊息欄位路徑；2026-11-11 改成契約類別指紋，新增`VersionContractTest`5項）；`ArtifactContractTest`用2.51.13與2.51.14兩個真JAR各跑一次，指紋都等於常數；Sonnet reviewer判PASS（`.herdr-work/v14/review-1.md`），建議已修 |
 | viewer-bootstrap | 10 tests全過；增加僅供host-fixture的`--fixture-no-resourcepacks`，避免模型測試複製大量外觀小檔 |
 | relay-core | 先前22 tests全過，這輪未修改 |
 | relay-bridge | 先前6 tests全過，這輪未修改 |

@@ -28,5 +28,13 @@ class SaoSnapshotTest {
   var state=SaoSnapshot.captureFields(loader,100);state.getAsJsonObject("sections").getAsJsonObject("party").addProperty("extraToken","bad");
   fr.sao.saoui.skills.SkillStatusClient.level=42;assertThrows(IllegalArgumentException.class,()->SaoSnapshot.prepareFields(loader,state,0));assertEquals(42,fr.sao.saoui.skills.SkillStatusClient.level);
  }
+ @Test void nonFiniteTimerFailsAtCaptureWithFieldPath(){
+  var c=fr.sao.saoui.skills.SkillStatusClient.cooldowns;c.put("nan-test",Double.NaN);
+  try{assertEquals("skills.cooldowns: non-finite timer",assertThrows(IllegalArgumentException.class,()->SaoSnapshot.captureFields(loader,100)).getMessage());}finally{c.remove("nan-test");}
+ }
+ @SuppressWarnings({"unchecked","rawtypes"}) @Test void encodeFailureNamesTheField(){
+  var skills=(java.util.Map)fr.sao.saoui.skills.SkillStatusClient.allSkills;skills.put(999,new Object());
+  try{assertEquals("skills.allSkills: State type is not in the declared schema: java.lang.Object",assertThrows(IllegalArgumentException.class,()->SaoSnapshot.captureFields(loader,100)).getMessage());}finally{skills.remove(999);}
+ }
  @Test void unknownSchemaOrArtifactIsRejected()throws Exception{var s=SaoSnapshot.captureFields(loader,100);s.addProperty("artifact","unknown");assertThrows(IllegalArgumentException.class,()->SaoSnapshot.prepareFields(loader,s,0));}
 }

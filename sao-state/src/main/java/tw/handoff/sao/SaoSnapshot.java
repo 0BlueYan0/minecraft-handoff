@@ -31,14 +31,15 @@ public final class SaoSnapshot {
  static JsonObject captureFields(ClassLoader loader,long now)throws Exception{return captureFields(loader,now,SaoSchema.CONTRACT_FINGERPRINT);}
  static JsonObject captureFields(ClassLoader loader,long now,String artifact)throws Exception{
   var out=new JsonObject();out.addProperty("schema",1);out.addProperty("artifact",artifact);out.addProperty("capturedNanos",now);var sections=new JsonObject();out.add("sections",sections);
-  for(var e:SaoSchema.CLASSES.entrySet()){Class<?> c=Class.forName(e.getValue(),false,loader);var section=new JsonObject();for(String name:SaoSchema.FIELDS.get(e.getKey())){Object value=field(c,name).get(null);synchronized(value==null?c:value){section.add(name,VALUES.encode(value));}}sections.add(e.getKey(),section);}
+  for(var e:SaoSchema.CLASSES.entrySet()){Class<?> c=Class.forName(e.getValue(),false,loader);var section=new JsonObject();for(String name:SaoSchema.FIELDS.get(e.getKey())){Object value=field(c,name).get(null);synchronized(value==null?c:value){if(e.getKey().equals("skills")&&value instanceof Map<?,?> times)for(Object t:times.values())if(t instanceof Double d&&!Double.isFinite(d))throw new IllegalArgumentException("skills."+name+": non-finite timer");section.add(name,encodeAt(e.getKey()+"."+name,value));}}sections.add(e.getKey(),section);}
   Class<?> store=Class.forName("fr.sao.questtracker.model.QuestHudStore",false,loader);Object raw=field(store,"STATES").get(null);var quests=new JsonArray();
   if(!(raw instanceof Map<?,?> states)||states.size()>256)throw new IllegalArgumentException("Invalid quest state");
   for(Object state:states.values()){
    if(!(boolean)field(state.getClass(),"targetVisible").get(state))continue;
-   var item=new JsonObject();item.addProperty("packetType",0);for(String name:SaoSchema.QUEST_FIELDS)item.add(payloadName(name),VALUES.encode(field(state.getClass(),name).get(state)));quests.add(item);
+   var item=new JsonObject();item.addProperty("packetType",0);for(String name:SaoSchema.QUEST_FIELDS)item.add(payloadName(name),encodeAt("quests."+name,field(state.getClass(),name).get(state)));quests.add(item);
   }out.add("quests",quests);bounded(out);return out;
  }
+ private static JsonElement encodeAt(String path,Object value){try{return VALUES.encode(value);}catch(IllegalArgumentException failure){throw new IllegalArgumentException(path+": "+failure.getMessage(),failure);}}
  private static String payloadName(String field){return Set.of("questTextJson","objectiveTextJson","distanceTextJson","topTextJson","bottomTextJson").contains(field)?field.substring(0,field.length()-4):field;}
  static Field field(Class<?> type,String name)throws NoSuchFieldException{var f=type.getDeclaredField(name);f.setAccessible(true);return f;}
  private static void bounded(JsonObject value){if(value.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8).length>2*1024*1024)throw new IllegalArgumentException("Snapshot exceeds budget");}
