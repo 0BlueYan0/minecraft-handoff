@@ -2,6 +2,8 @@
 
 日期：2026-11-11。適用：Minecraft Handoff 0.1.0。
 
+後續 Mac 實測確認啟動流程會移除附加 JAR，P0 尚未載入；相容性實驗更新見 [啟動器相容性追蹤](P0-LAUNCHER-COMPATIBILITY.md)。以下保留原始建置驗證紀錄。
+
 ## 已執行的驗證
 
 在 Windows 11 上，使用原啟動器隨附的 JDK 21.0.7 編譯、JRE 21.0.11 執行 JUnit。所有 class 以 Java 21、非 preview bytecode 產生。

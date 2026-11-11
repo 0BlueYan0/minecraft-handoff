@@ -6,3 +6,4 @@ pluginManagement {
     }
 }
 rootProject.name = 'minecraft-handoff'
+include 'launcher-helper'

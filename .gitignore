@@ -9,3 +9,4 @@ secrets.properties
 **/credentials*
 **/tokens*
 .DS_Store
+__pycache__/
