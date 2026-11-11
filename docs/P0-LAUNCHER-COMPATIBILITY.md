@@ -17,6 +17,10 @@
 
 0.1.1 不再作為可用的進服部署路徑。沒有進行前一則回覆提出的自動停止修改；它無法解決此驗證拒絕。不能從 Invalid token 單獨判定是一次性 token、到期、退出撤銷、工作階段綁定或本機驗證服務中止；需要驗證服務／啟動器的生命週期證據。
 
+使用者確認第二次遊戲開啟時原 Triggers Client 仍開著，排除啟動器整個關閉這個解釋。進一步本機 Windows exe 字串檢查發現 `src/launcher_token.rs`、`launcher_token_expires_at`、`/api/launcher/session`、`src/heartbeat.rs`、`/api/launcher/heartbeat`、`game_foreground`、`play_seconds`。它們是獨立啟動 session／心跳的靜態線索，不能證明 Mac 這次 token 失效的確切分支，也不能證明 PID 綁定或退出撤銷。
+
+本機 Windows main.log 只有其他啟動時間的紀錄，沒有本次 Mac 12:49–12:51 的啟動 session 狀態。下一項必要證據是 Mac 原啟動器同期的主日誌；不需要複製 token 值或完整啟動命令。取得這項證據前不再以參數重播方式要求使用者重試。
+
 後續設計的必要條件是保留合法的原啟動器驗證工作階段。先確認原啟動器是否提供正式擴充／模組允許機制，再決定接入方式；不以複製舊驗證值、修改驗證模組或偽造服務回應替代此條件。啟動器認可的原遊戲程序如何接入自訂功能，目前尚未驗證，不宣稱已找到修正。
 
 以下保留先前實驗與驗證邊界作為歷史紀錄。
