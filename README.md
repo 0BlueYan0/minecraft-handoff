@@ -4,7 +4,7 @@
 
 **目前版本：0.1.0，P0 診斷模組。尚未具備遊戲接管或保持其他客戶端連線的功能。**
 
-**Mac 相容性更新：使用者已確認原啟動流程會移除額外 JAR，原先直接放入 mods 的方式無法完成這次測試。新增 [0.1.1 啟動輔助程式](launcher-helper/macos/README-zh-TW.md)，以原啟動器產生的參數重新啟動遊戲，診斷 JAR 留在實例外；此替代啟動路徑尚待 Mac／實服驗證。**
+**Mac 實測更新：原啟動流程會移除額外 JAR。0.1.1 輔助程式的替代啟動已在 M1 載入診斷模組，但進服收到 `Launcher validation failed: Invalid token`，因此這條路徑未通過實服驗證，不再作為目前部署方案。詳見 [驗證失敗紀錄](docs/P0-LAUNCHER-COMPATIBILITY.md)。**
 
 ## 本次交付
 

@@ -2,7 +2,7 @@
 
 日期：2026-11-11。適用：Minecraft Handoff 0.1.0。
 
-後續 Mac 實測確認啟動流程會移除附加 JAR，P0 尚未載入；相容性實驗更新見 [啟動器相容性追蹤](P0-LAUNCHER-COMPATIBILITY.md)。以下保留原始建置驗證紀錄。
+後續 Mac 實測確認直接放入的附加 JAR 會被移除；再以 0.1.1 替代啟動時，P0 已載入，但伺服器以 Invalid token 拒絕啟動器驗證。相容性實驗更新見 [啟動器相容性追蹤](P0-LAUNCHER-COMPATIBILITY.md)。以下保留原始建置驗證紀錄。
 
 ## 已執行的驗證
 
