@@ -142,6 +142,10 @@ NativeCapture會檢查same-user/PID、實際gameDirectory、player/level非null�
 - 遊戲JVM會保留第一次附加時的`StateProbeAgent`類別（推論，與現象一致），舊agentmain只寫例外類別名。所以`NativeCapture.capture`自己寫失敗訊息並正常返回；訊息帶欄位路徑，經`StateProbeAgent.detail`清洗（只留`[A-Za-z0-9_.$#:, -]`、300字）。
 - `mux.sendable`在世界內仍是null：`Mux.hello`只在HELLO帶`outgoing`陣列時設定，實服HELLO沒帶；SERVED有100個，HELLO確實收到。
 - SAO有客戶端要求重送狀態的封包（只查了97個選定classes）：Equipment `OPEN`/`PRESETS`/`LIST`、Party `OPEN`、`SaoUiMessaging.requestResync`送簽章的`MOB_HB_RESYNC`。技能與任務HUD在這97個classes裡沒找到重送封包，不代表整個jar沒有。這支持「viewer加入時請伺服器重送」的方向，但簽章訊息viewer能否送出未查。
+- **2026-11-12 全jar查重送來源（Vineflower反編譯整個2.51.14，1057個top-level檔，放session scratchpad，不提交）。** 只看客戶端，伺服器怎麼回應看不到，以下「會重送」都是推論。
+  - 技能：`saogui:main`的`INIT`帶level、mana或stamina、`skills`（slot→技能名，最多64，略過slot7），`handleInitPacket`整個換掉`allSkills`並補cooldown鍵。客戶端只在收到伺服器`SERVER_HELLO`時回簽章的`HELLO`（caps `MOB_HB_TICKS,ASK`），客戶端沒有主動要`INIT`的操作。HELLO後伺服器是否回INIT沒驗證。簽章是jar內常數HMAC加玩家UUID與`ServerTime`，同一個jar的viewer算得出相同格式，伺服器收不收沒驗證。
+  - 任務HUD：只有伺服器→客戶端的`capuodev:quest_hud`。客戶端唯一的任務C2S是`capuodev:quest_menu_action`的START，**沒有重送要求**。`QuestTrackerClient`在`ClientPlayConnectionEvents.JOIN`與`DISCONNECT`都呼叫`QuestHudStore.clear()`，所以viewer的快照還原一定要在JOIN之後套用，否則會被清掉。
+  - Mux `:hello`（伺服器送）會跑`HELLO_LISTENERS`，cinematic、kobold、memorylaby、ServerClock等在這時各自送HELLO。daily、mail、redeem、guild、shop、bugreport也有HELLO。大約50個`Mux.open/ops/openRaw`通道，很多系統有`OPEN`/`LIST`/`STATE`操作（auctions、mounts、mail、echos、daily、dungeon、cosmetics等），是不是「要求重送」要逐個看。
 - 審查：Sonnet兩輪皆PASS（`.herdr-work/v14/review-1.md`、`review-2.md`），建議已修。2026-11-12 補了QuestHud NaN的`SaoSnapshot`端到端還原測試（test下照2.51.13反編譯加了QuestHudPayload/State/Kind/Anchor/Style假類別，Style只取2個component），使用者選不開reviewer，主對話自查。
 
 ## 測試與審查
