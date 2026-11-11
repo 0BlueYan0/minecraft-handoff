@@ -149,6 +149,17 @@ NativeCapture會檢查same-user/PID、實際gameDirectory、player/level非null�
   - **2026-11-12 00:52 對PID79996送一次HELLO（使用者要求「送 HELLO 測一次」）。** 一次性agent放在session scratchpad不進repo，呼叫SAO自己的`SaoUiMessaging.sendHello()`，送出前與送出後0.25/0.5/1/2/4秒各讀一次`SkillStatusClient`。Sonnet審PASS（`.herdr-work/hello/review-1.md`），4條建議修完由主對話檢查。結果（`work/hello-init-20261112-005242.txt`）是6次取樣都相同：level5、slot2、skillName非空、allSkills0、cooldown鍵3。**觀察：4秒內伺服器沒有回INIT。** 遊戲log 00:51到00:54沒有斷線、被踢或錯誤，遊戲有回應。推論（未驗證）：伺服器只在加入或特定事件時送INIT，或同一條連線的第二次HELLO被忽略。所以viewer中途加入時拿不到完整技能清單，要靠常駐端在INIT到達時擷取並保存，或另外找伺服器會回INIT的事件。同一個JVM已設`tw.handoff.hello.sent`，這支agent不會再送。
   - **完整技能目錄有可重送的來源，但不在SAOUI，在`saojob-1.1.3.jar`。** 遊戲log（`[TriggersShopClient] Packet sortant/entrant`，SAO自己把封包印到STDOUT）顯示00:06與00:58各送一次`SKILLS_DATA_REQUEST`，1秒內收到`SKILLS_DATA_RESPONSE`，欄位有`hasClass`、`className`、`classLevel`、`availablePoints`、`resetPoints`、`resetRefund`、`competences`、`slots`、`stats`等。反編譯（session scratchpad，不提交）：通道`saojob:main`，`MapSenders.sendSkillsDataRequest()`簽章送出，呼叫者只有`SkillsData.requestRefresh()`，由`SkillsSidebarScreen`開啟時觸發。回應由`SkillsHandler.handleSkillsData`交給`SkillsData.applySnapshot`，整份換掉`skills`與`competenceById`。所以viewer開技能側欄就會向伺服器重新要一次完整資料，這是遊戲本來的操作，不用自己組封包。另外有`SKILL_TREE_REQUEST`（技能樹）。
   - 這帶出兩件事。第一，`sao-state`的schema沒有包含`saojob`的`SkillsData`，目前的快照漏了這一塊。第二，SAOUI的`SkillStatusClient.allSkills`（技能列配置）仍然只有INIT會送，伺服器什麼時候送INIT，log裡看不到，因為SAOUI收INIT時不寫log。
+  - **其他SAO mod的重送來源（2026-11-12，Python掃類別檔字串＋反編譯4個mod，放scratchpad不提交）。** 「會重送」都是讀客戶端碼的推論，伺服器端行為只有saojob在log裡看到。
+
+    | mod | 通道 | 客戶端可要求重送 | 觸發時機 |
+    |---|---|---|---|
+    | saojob | `saojob:main` | `SKILLS_DATA_REQUEST`（log已看到回應） | 開技能側欄 |
+    | companionsmod | `companions:main` | `DATA_REQUEST` | 開介面`requestData`與`refreshSilent` |
+    | altarmod | `altar:main` | `DATA_REQUEST`（帶altarId） | 祭壇介面輪詢 |
+    | sao-dungeons-companion | `saodungeons:region` | 有`REQUEST_STATE`常數，呼叫者沒查 | JOIN時送HELLO，區域編輯用 |
+    | saoblessing | `saoblessing`的MessagingManager | 沒有，只有回應`SERVER_HELLO`的HELLO，`OFFER_OPEN`是伺服器推送 | 同SAOUI的INIT |
+
+    還沒看的：fracturedwar（約20種`*_REQUEST`，像`MAIN_MENU_REQUEST`、`ARMY_REQUEST`）、z-plugin-companion（`MENU_REQUEST`、`CATALOG_REQUEST`、`ROSTER_REQUEST`）、zap-dialogue-client、zap-ui-companion、sao-ui-lib，這幾個都有C2S註冊。relmod、saolabyrinth-companion、sao-post-companion、meg、trueinvisibility沒有找到請求字串。
   - Mux `:hello`（伺服器送）會跑`HELLO_LISTENERS`，cinematic、kobold、memorylaby、ServerClock等在這時各自送HELLO。daily、mail、redeem、guild、shop、bugreport也有HELLO。大約50個`Mux.open/ops/openRaw`通道，很多系統有`OPEN`/`LIST`/`STATE`操作（auctions、mounts、mail、echos、daily、dungeon、cosmetics等），是不是「要求重送」要逐個看。
 - 審查：Sonnet兩輪皆PASS（`.herdr-work/v14/review-1.md`、`review-2.md`），建議已修。2026-11-12 補了QuestHud NaN的`SaoSnapshot`端到端還原測試（test下照2.51.13反編譯加了QuestHudPayload/State/Kind/Anchor/Style假類別，Style只取2個component），使用者選不開reviewer，主對話自查。
 
