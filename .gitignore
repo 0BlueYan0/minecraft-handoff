@@ -17,3 +17,6 @@ run-agent-smoke/
 /work/
 /handoff-artifacts/
 /handoff-evidence/
+
+# project rule evals stay private
+/evals/rules/

@@ -145,6 +145,7 @@ NativeCapture會檢查same-user/PID、實際gameDirectory、player/level非null�
 - **2026-11-12 全jar查重送來源（Vineflower反編譯整個2.51.14，1057個top-level檔，放session scratchpad，不提交）。** 只看客戶端，伺服器怎麼回應看不到，以下「會重送」都是推論。
   - 技能：`saogui:main`的`INIT`帶level、mana或stamina、`skills`（slot→技能名，最多64，略過slot7），`handleInitPacket`整個換掉`allSkills`並補cooldown鍵。客戶端只在收到伺服器`SERVER_HELLO`時回簽章的`HELLO`（caps `MOB_HB_TICKS,ASK`），客戶端沒有主動要`INIT`的操作。HELLO後伺服器是否回INIT沒驗證。簽章是jar內常數HMAC加玩家UUID與`ServerTime`，同一個jar的viewer算得出相同格式，伺服器收不收沒驗證。
   - 任務HUD：只有伺服器→客戶端的`capuodev:quest_hud`。客戶端唯一的任務C2S是`capuodev:quest_menu_action`的START，**沒有重送要求**。`QuestTrackerClient`在`ClientPlayConnectionEvents.JOIN`與`DISCONNECT`都呼叫`QuestHudStore.clear()`，所以viewer的快照還原一定要在JOIN之後套用，否則會被清掉。
+  - 2026-11-12 00:35 同一個PID79996再做一次只讀擷取（`work/live-state-20261112-003550.json`），擷取後遊戲有回應：level4、slot2、`allSkills`0、cooldowns3（剩餘時間都是0）、durations0、questHUD2、equipment已載入。INIT會對每個技能`putIfAbsent(name,0.0)`，並刪掉不在清單裡且已歸零的cooldown，所以這3個cooldown鍵**推論**是最近一次INIT的技能加上用過的技能，只能當作技能清單的下限，不是完整清單。要拿完整清單就得讓伺服器重送INIT，或在INIT剛到時先擷取。
   - Mux `:hello`（伺服器送）會跑`HELLO_LISTENERS`，cinematic、kobold、memorylaby、ServerClock等在這時各自送HELLO。daily、mail、redeem、guild、shop、bugreport也有HELLO。大約50個`Mux.open/ops/openRaw`通道，很多系統有`OPEN`/`LIST`/`STATE`操作（auctions、mounts、mail、echos、daily、dungeon、cosmetics等），是不是「要求重送」要逐個看。
 - 審查：Sonnet兩輪皆PASS（`.herdr-work/v14/review-1.md`、`review-2.md`），建議已修。2026-11-12 補了QuestHud NaN的`SaoSnapshot`端到端還原測試（test下照2.51.13反編譯加了QuestHudPayload/State/Kind/Anchor/Style假類別，Style只取2個component），使用者選不開reviewer，主對話自查。
 
