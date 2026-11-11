@@ -142,7 +142,7 @@ NativeCapture會檢查same-user/PID、實際gameDirectory、player/level非null�
 - 遊戲JVM會保留第一次附加時的`StateProbeAgent`類別（推論，與現象一致），舊agentmain只寫例外類別名。所以`NativeCapture.capture`自己寫失敗訊息並正常返回；訊息帶欄位路徑，經`StateProbeAgent.detail`清洗（只留`[A-Za-z0-9_.$#:, -]`、300字）。
 - `mux.sendable`在世界內仍是null：`Mux.hello`只在HELLO帶`outgoing`陣列時設定，實服HELLO沒帶；SERVED有100個，HELLO確實收到。
 - SAO有客戶端要求重送狀態的封包（只查了97個選定classes）：Equipment `OPEN`/`PRESETS`/`LIST`、Party `OPEN`、`SaoUiMessaging.requestResync`送簽章的`MOB_HB_RESYNC`。技能與任務HUD在這97個classes裡沒找到重送封包，不代表整個jar沒有。這支持「viewer加入時請伺服器重送」的方向，但簽章訊息viewer能否送出未查。
-- 審查：Sonnet兩輪皆PASS（`.herdr-work/v14/review-1.md`、`review-2.md`），建議已修；未做的建議是QuestHud NaN的`SaoSnapshot`端到端還原測試（test下沒有QuestHudPayload/State假類別）。
+- 審查：Sonnet兩輪皆PASS（`.herdr-work/v14/review-1.md`、`review-2.md`），建議已修。2026-11-12 補了QuestHud NaN的`SaoSnapshot`端到端還原測試（test下照2.51.13反編譯加了QuestHudPayload/State/Kind/Anchor/Style假類別，Style只取2個component），使用者選不開reviewer，主對話自查。
 
 ## 測試與審查
 
@@ -150,7 +150,7 @@ NativeCapture會檢查same-user/PID、實際gameDirectory、player/level非null�
 
 | 範圍 | 最新結果 |
 |---|---|
-| sao-state | 32 tests，0 failure/error/skip（2026-11-12 加NaN編碼、失敗訊息欄位路徑；2026-11-11 改成契約類別指紋，新增`VersionContractTest`5項）；`ArtifactContractTest`用2.51.13與2.51.14兩個真JAR各跑一次，指紋都等於常數；Sonnet reviewer判PASS（`.herdr-work/v14/review-1.md`），建議已修 |
+| sao-state | 33 tests，0 failure/error/skip（2026-11-12 加QuestHud NaN端到端還原測試；同日加NaN編碼、失敗訊息欄位路徑；2026-11-11 改成契約類別指紋，新增`VersionContractTest`5項）；`ArtifactContractTest`用2.51.13與2.51.14兩個真JAR各跑一次，指紋都等於常數；Sonnet reviewer判PASS（`.herdr-work/v14/review-1.md`），建議已修 |
 | viewer-bootstrap | 10 tests全過；增加僅供host-fixture的`--fixture-no-resourcepacks`，避免模型測試複製大量外觀小檔 |
 | relay-core | 先前22 tests全過，這輪未修改 |
 | relay-bridge | 先前6 tests全過，這輪未修改 |

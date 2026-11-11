@@ -36,5 +36,20 @@ class SaoSnapshotTest {
   var skills=(java.util.Map)fr.sao.saoui.skills.SkillStatusClient.allSkills;skills.put(999,new Object());
   try{assertEquals("skills.allSkills: State type is not in the declared schema: java.lang.Object",assertThrows(IllegalArgumentException.class,()->SaoSnapshot.captureFields(loader,100)).getMessage());}finally{skills.remove(999);}
  }
+ /** 2026-11-11 live capture: a compass HUD with no target keeps targetAngleDegrees=Float.NaN and must come back as NaN. */
+ @Test void questHudWithNaNTargetAngleRoundTrips()throws Exception{
+  var states=fr.sao.questtracker.model.QuestHudStore.STATES;
+  var hud=new fr.sao.questtracker.model.QuestHudState("compass",fr.sao.questtracker.model.QuestHudKind.COMPASS,fr.sao.questtracker.model.QuestHudAnchor.TOP_CENTER,0,10,1.5f,new fr.sao.questtracker.model.QuestHudStyle(true,4),"\"quest\"","\"objective\"","\"12m\"","\"top\"","\"bottom\"","","",1f,1f,Float.NaN,"target","","{}");
+  states.put("compass",hud);
+  try{
+   var snapshot=SaoSnapshot.captureFields(loader,100);
+   assertEquals("NaN",snapshot.getAsJsonArray("quests").get(0).getAsJsonObject().get("targetAngleDegrees").getAsString());
+   var plan=SaoSnapshot.prepareFields(loader,snapshot,0,()->0L);
+   states.clear();plan.apply();
+   Object restored=states.get("compass");assertNotNull(restored);assertNotSame(hud,restored);
+   for(String name:SaoSchema.QUEST_FIELDS)if(!name.equals("targetAngleDegrees"))assertEquals(SaoSnapshot.field(hud.getClass(),name).get(hud),SaoSnapshot.field(restored.getClass(),name).get(restored),name);
+   assertTrue(Float.isNaN((float)SaoSnapshot.field(restored.getClass(),"targetAngleDegrees").get(restored)));
+  }finally{states.clear();}
+ }
  @Test void unknownSchemaOrArtifactIsRejected()throws Exception{var s=SaoSnapshot.captureFields(loader,100);s.addProperty("artifact","unknown");assertThrows(IllegalArgumentException.class,()->SaoSnapshot.prepareFields(loader,s,0));}
 }
