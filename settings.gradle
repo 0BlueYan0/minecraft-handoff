@@ -7,3 +7,4 @@ pluginManagement {
 }
 rootProject.name = 'minecraft-handoff'
 include 'launcher-helper'
+include 'runtime-agent'

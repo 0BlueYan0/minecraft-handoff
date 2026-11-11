@@ -15,6 +15,16 @@ loom {
             sourceSet sourceSets.client
         }
     }
+    runs {
+        agentSmoke {
+            client()
+            runDir 'run-agent-smoke'
+            vmArg '-Xmx2G'
+            vmArg '-Dhandoff.agentSmoke=true'
+            vmArg '-Dfabric.debug.disableModIds=minecraft_handoff'
+            programArgs '--username', 'HandoffSmoke', '--width', '854', '--height', '480'
+        }
+    }
 }
 
 dependencies {
