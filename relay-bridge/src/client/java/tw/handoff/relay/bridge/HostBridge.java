@@ -26,6 +26,8 @@ public final class HostBridge {
     final FrameCodec codec;
     private final Channel upstream;
     private NativeFrontend frontend;
+    private RemoteControl control;
+    PacketLab lab;
     private HostBridge(Minecraft mc)throws Exception{
         minecraft=mc;if(mc.player==null||mc.level==null||mc.getConnection()==null)throw new IllegalStateException("Join the original server first");
         registries=mc.getConnection().registryAccess();codec=new FrameCodec(registries);
@@ -36,30 +38,42 @@ public final class HostBridge {
     public static String start(Object client,Path directory,int port)throws Exception{
         Minecraft mc=(Minecraft)client;
         if(!mc.gameDirectory.toPath().toRealPath().equals(directory.toRealPath()))throw new IllegalStateException("Wrong game instance");
-        HostBridge host=new HostBridge(mc);host.frontend=new NativeFrontend(host,port);
+        HostBridge host=new HostBridge(mc);if(PacketLab.enabled(mc))host.lab=new PacketLab(host,host.upstream);host.frontend=new NativeFrontend(host,port);host.control=new RemoteControl(host);
+        if(host.lab!=null)host.lab.install();
         host.upstream.eventLoop().submit(()->host.upstream.pipeline().addBefore("packet_handler","handoff_relay_capture",new ChannelDuplexHandler(){
             public void channelRead(ChannelHandlerContext context,Object message)throws Exception{
                 List<byte[]> frames=null;
-                if(message instanceof Packet<?> packet&&host.peers.stream().anyMatch(peer->peer.live)&&MirrorRules.forward(packet)){
-                    try{frames=host.codec.freeze(packet);}catch(RuntimeException unsupported){LOG.debug("Relay omitted unsupported packet type {}",packet.type().id());}
+                if(host.lab==null&&message instanceof Packet<?> packet&&host.peers.stream().anyMatch(peer->peer.live)&&MirrorRules.forward(packet)){
+                    try{frames=host.codec.freeze(packet);}catch(RuntimeException|LinkageError unsupported){LOG.debug("Relay omitted unsupported packet type {}",packet.type().id());}
                 }
                 context.fireChannelRead(message);
-                if(frames!=null)for(NativePeer peer:host.peers)if(peer.live)peer.sendFrames(frames);
+                if(frames!=null)for(NativePeer peer:host.peers)if(peer.live)try{peer.sendFrames(frames);}catch(RuntimeException|LinkageError ignored){peer.close("Relay stream unavailable");}
+            }
+            public void write(ChannelHandlerContext ctx,Object msg,io.netty.channel.ChannelPromise promise)throws Exception{
+                if(host.lab!=null&&host.control.remoteOwns()&&msg instanceof Packet<?> p&&!PacketLab.local(p.type().id().getPath())){
+                    if(!(p instanceof net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket)){promise.setSuccess();return;}
+                    // Original launcher/connection payloads remain owned by the original client.
+                    String ns=((net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket)p).payload().type().id().getNamespace();
+                    if(!java.util.Set.of("launcher","fabric","fabric-networking-api-v1","minecraft").contains(ns)){promise.setSuccess();return;}
+                }ctx.write(msg,promise);
             }
         })).syncUninterruptibly();
-        ClientTickEvents.END_CLIENT_TICK.register(clientTick->{try{host.tick();}catch(RuntimeException failure){LOG.warn("Relay tick failed ({})",failure.getClass().getSimpleName());}});
+        ClientTickEvents.START_CLIENT_TICK.register(clientTick->{try{host.control.tick();}catch(RuntimeException|LinkageError failure){host.control.release();LOG.warn("Relay input stopped ({})",failure.getClass().getSimpleName());}});
+        ClientTickEvents.END_CLIENT_TICK.register(clientTick->{try{host.tick();host.control.pose();}catch(RuntimeException|LinkageError failure){LOG.warn("Relay tick failed ({})",failure.getClass().getSimpleName());}});
+        mc.getWindow().setTitle("Minecraft Handoff - HOST (F8: local control)");
         LOG.info("Relay frontend ready on loopback port {}",host.frontend.port());
-        return Integer.toString(host.frontend.port());
+        return host.frontend.port()+":"+host.profile().getId()+":"+host.profile().getName();
     }
     Minecraft minecraft(){return minecraft;}
     RegistryAccess.Frozen registries(){return registries;}
     GameProfile profile(){return minecraft.player.getGameProfile();}
     FeatureFlagSet features(){return minecraft.level.enabledFeatures();}
     void add(NativePeer peer){peers.add(peer);}
+    List<NativePeer> peers(){return List.copyOf(peers);}
     void remove(NativePeer peer){peers.remove(peer);}
     void tick(){for(NativePeer peer:peers)peer.tick();}
-    void ready(NativePeer peer){if(peer.lifecycle.active()&&!peer.closed)LOG.info("Relay viewer world ready");}
-    void input(NativePeer peer,Packet<?> packet){ /* Input ownership is added after the snapshot path is validated. */ }
+    void ready(NativePeer peer){if(!peer.closed&&peer.lifecycle.claimReadyNotification()){LOG.info("Relay viewer world ready");control.ready(peer);}}
+    void input(NativePeer peer,Packet<?> packet){control.input(peer,packet);}
     void snapshot(NativePeer peer){
         upstream.eventLoop().execute(()->{
             if(!upstream.config().isAutoRead()){peer.close("Original connection is changing state");return;}
@@ -69,8 +83,8 @@ public final class HostBridge {
             minecraft.execute(()->{
                 try{
                     if(!pause.active())return;
-                    if(!peer.closed){SnapshotPackets.send(this,peer);peer.lifecycle.snapshotSent();peer.live=true;ready(peer);}
-                }catch(Exception failure){peer.close("Snapshot unavailable: "+failure.getClass().getSimpleName());LOG.warn("Relay snapshot failed ({})",failure.getClass().getSimpleName());}
+                    if(!peer.closed){SnapshotPackets.send(this,peer);if(lab!=null)lab.replay(peer);peer.lifecycle.snapshotSent();peer.live=true;ready(peer);}
+                }catch(Exception|LinkageError failure){peer.close("Snapshot unavailable: "+failure.getClass().getSimpleName());LOG.warn("Relay snapshot failed ({})",failure.getClass().getSimpleName());}
                 finally{timeout.cancel(false);pause.close();}
             });
         });

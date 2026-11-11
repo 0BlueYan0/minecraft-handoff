@@ -21,7 +21,6 @@ public final class EntryAgent {
             channel=Path.of(decode(parts[0]));game=Path.of(decode(parts[1])).toRealPath();port=Integer.parseInt(parts[2]);
             if(!channel.isAbsolute()||!Files.isRegularFile(channel,LinkOption.NOFOLLOW_LINKS)||!Files.isDirectory(game)||port<0||port>65535)return;
         }catch(Exception invalid){return;}
-        if(!STARTED.compareAndSet(false,true)){write(channel,state);return;}
         write(channel,"PENDING");
         try{
             Class<?> minecraft=null;
@@ -34,6 +33,9 @@ public final class EntryAgent {
                 try{client=minecraft.getMethod(accessor).invoke(null);break;}catch(NoSuchMethodException absent){}
             }
             if(client==null)throw new IllegalStateException("Game not initialized");
+            // Validate on every attach, including retries and an already-installed bridge.
+            GameIdentity.require(client,game);
+            if(!STARTED.compareAndSet(false,true)){write(channel,state);return;}
             bridgeLoader=new BridgeLoader(EntryAgent.class.getProtectionDomain().getCodeSource().getLocation(),minecraft.getClassLoader());
             Object target=client;
             ((Executor)client).execute(()->{
@@ -43,7 +45,7 @@ public final class EntryAgent {
                     state="READY:"+result;write(channel,state);
                 }catch(Exception|LinkageError failure){state="FAILED:BRIDGE:"+rootType(failure);write(channel,state);}
             });
-        }catch(Exception|LinkageError failure){state="FAILED:BOOTSTRAP:"+rootType(failure);write(channel,state);}
+        }catch(Exception|LinkageError failure){write(channel,"FAILED:BOOTSTRAP:"+rootType(failure));}
     }
     private static String decode(String value){return new String(Base64.getUrlDecoder().decode(value),StandardCharsets.UTF_8);}
     private static String rootType(Throwable failure){while(failure.getCause()!=null&&failure.getCause()!=failure)failure=failure.getCause();return failure.getClass().getSimpleName();}

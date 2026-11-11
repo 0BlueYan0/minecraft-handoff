@@ -11,3 +11,6 @@ secrets.properties
 .DS_Store
 __pycache__/
 run-agent-smoke/
+**/pairing.json
+**/host.p12
+**/keystore.password

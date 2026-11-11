@@ -73,13 +73,16 @@ public record GameInstall(Path root,Path client,Path assets,String assetIndex,Li
         }catch(java.security.NoSuchAlgorithmException impossible){throw new IOException(impossible);}
     }
     public ViewerLaunch launch(Path javaBinary,Path game,Path guard,int port,String name,UUID id)throws IOException{
+        return launch(javaBinary,game,guard,port,name,id,true);
+    }
+    public ViewerLaunch launch(Path javaBinary,Path game,Path guard,int port,String name,UUID id,boolean thin)throws IOException{
         if(port<1||port>65535||name==null||!name.matches("[A-Za-z0-9_]{1,16}")||id==null)throw new IllegalArgumentException("Invalid local viewer profile");
         if(!Files.isRegularFile(guard))throw new IOException("Viewer guard JAR is missing");
         Path nativeDir=game.resolve("natives").toAbsolutePath();Files.createDirectories(nativeDir);
         List<String> cp=new ArrayList<>();for(Path lib:libraries)cp.add(lib.toString());cp.add(client.toString());
         List<String> command=new ArrayList<>(List.of(javaBinary.toString(),"-Xms256M","-Xmx4G","-Djava.library.path="+nativeDir,"-Djna.tmpdir="+nativeDir,
             "-Dorg.lwjgl.system.SharedLibraryExtractPath="+nativeDir,"-Dio.netty.native.workdir="+nativeDir,
-            "-Dminecraft.launcher.brand=MinecraftHandoff","-Dminecraft.launcher.version=0.2.0","-Dfabric.addMods="+guard.toAbsolutePath(),"-Dhandoff.viewerPort="+port,
+            "-Dminecraft.launcher.brand=MinecraftHandoff","-Dminecraft.launcher.version=0.2.0","-Dfabric.addMods="+guard.toAbsolutePath(),"-Dhandoff.viewerPort="+port,"-Dhandoff.viewerMode="+thin,
             "-cp",String.join(java.io.File.pathSeparator,cp),"net.fabricmc.loader.impl.launch.knot.KnotClient",
             "--username",name,"--uuid",id.toString().replace("-",""),"--accessToken","0","--userType","legacy","--version","1.21.4","--versionType","release",
             "--gameDir",game.toAbsolutePath().toString(),"--assetsDir",assets.toString(),"--assetIndex",assetIndex,"--quickPlayMultiplayer","127.0.0.1:"+port,

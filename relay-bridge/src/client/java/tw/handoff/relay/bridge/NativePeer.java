@@ -32,6 +32,7 @@ final class NativePeer implements InvocationHandler {
     final String id=UUID.randomUUID().toString();
     final HostBridge host;final Connection connection;final Channel channel;
     final PeerLifecycle lifecycle=new PeerLifecycle();
+    final tw.handoff.relay.core.InputInbox inputs=new tw.handoff.relay.core.InputInbox(64);
     final PendingBudget budget=new PendingBudget(2048,32L*1024*1024);
     final Object listener;
     volatile ConnectionProtocol protocol=ConnectionProtocol.HANDSHAKING;
@@ -45,12 +46,13 @@ final class NativePeer implements InvocationHandler {
     public Object invoke(Object proxy,Method method,Object[] args){
         String name=method.getName();
         if(method.getDeclaringClass()==Object.class)return switch(name){case "hashCode"->System.identityHashCode(proxy);case "equals"->proxy==args[0];default->"HandoffPrivatePeer";};
-        if(name.equals("flow"))return PacketFlow.SERVERBOUND;
-        if(name.equals("protocol"))return protocol;
-        if(name.equals("isAcceptingMessages")||name.equals("shouldHandleMessage"))return !closed&&connection.isConnected();
-        if(name.equals("createDisconnectionInfo"))return new DisconnectionDetails(Component.literal("Relay connection closed"));
-        if(name.equals("onDisconnect")){closed=true;lifecycle.close();host.remove(this);return null;}
-        if(name.equals("onPacketError")){close("Invalid relay packet");return null;}
+        // Names are intermediary-obfuscated in a production game; the public interface types are stable.
+        if(method.getReturnType()==PacketFlow.class)return PacketFlow.SERVERBOUND;
+        if(method.getReturnType()==ConnectionProtocol.class)return protocol;
+        if(method.getReturnType()==boolean.class)return !closed&&connection.isConnected();
+        if(method.getReturnType()==DisconnectionDetails.class)return new DisconnectionDetails(Component.literal("Relay connection closed"));
+        if(args!=null&&args.length==1&&args[0] instanceof DisconnectionDetails){closed=true;lifecycle.close();host.remove(this);return null;}
+        if(args!=null&&args.length>1&&args[0] instanceof Packet<?> && args[1] instanceof Exception){close("Invalid relay packet");return null;}
         if(args==null||args.length==0||!(args[0] instanceof Packet<?> packet))return null;
         try{handle(packet);}catch(Exception failure){close("Unsupported relay state: "+failure.getClass().getSimpleName());}
         return null;

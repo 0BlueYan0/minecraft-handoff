@@ -19,7 +19,7 @@ final class FrameCodec {
         List<byte[]> frames=new ArrayList<>();
         if(packet instanceof ClientboundBundlePacket bundle){
             frames.add(encode(new ClientboundBundleDelimiterPacket()));
-            for(Packet<?> child:bundle.subPackets())frames.addAll(freeze(child));
+            for(Packet<?> child:bundle.subPackets())if(MirrorRules.forward(child))frames.addAll(freeze(child));
             frames.add(encode(new ClientboundBundleDelimiterPacket()));
         }else frames.add(encode(packet));
         return frames;

@@ -18,13 +18,15 @@ public final class HostMain {
             Path self=Path.of(HostMain.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toRealPath();
             Path directory=Files.createTempDirectory("handoff-relay-");Path status=Files.createFile(directory.resolve("status"));
             try{
+                // An attached JVM keeps its agent archive open. Do not lock the distributable/build output.
+                Path agentCopy=directory.resolve("relay-agent.jar");Files.copy(self,agentCopy);
                 VirtualMachine vm=VirtualMachine.attach(Long.toString(pid));
-                try{vm.loadAgent(self.toString(),encode(status.toString())+"."+encode(game.toString())+".0");}finally{vm.detach();}
+                try{vm.loadAgent(agentCopy.toString(),encode(status.toString())+"."+encode(game.toString())+".0");}finally{vm.detach();}
                 long start=System.nanoTime();
                 while(System.nanoTime()-start<60_000_000_000L){
                     String result=Files.readString(status);
                     if(result.startsWith("READY:")||result.startsWith("FAILED:")){
-                        if(!result.matches("(?:READY:[0-9]+|FAILED:[A-Z_]+:[A-Za-z0-9_$]+)"))throw new IllegalStateException("Invalid status");
+                        if(!result.matches("(?:READY:[0-9]+:[0-9a-f-]{36}:[A-Za-z0-9_]{1,16}|FAILED:[A-Z_]+:[A-Za-z0-9_$]+)"))throw new IllegalStateException("Invalid status");
                         System.out.println(result);if(result.startsWith("FAILED:"))System.exit(1);return;
                     }
                     Thread.sleep(100);
