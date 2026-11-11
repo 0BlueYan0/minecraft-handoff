@@ -1,6 +1,6 @@
 # P0 Loader Diagnostics and Control Ownership Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task in this chat. Steps use checkbox (`- [ ]`) syntax for tracking. This plan does not request subagents.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task in this chat. Steps use checkbox (`- [x]`) syntax for tracking. This plan does not request subagents.
 
 **Goal:** Build an additive Fabric diagnostic mod and test the control ownership model, producing evidence for the later Minecraft handoff implementation.
 
@@ -46,32 +46,32 @@
 
 **Interfaces:** `ControlSession` exposes `Ticket prepare(String clientId)`, `boolean ready(Ticket ticket)`, `void cancel(Ticket ticket)`, `void disconnect(String clientId)`, `boolean acceptsInput(String clientId, long epoch)`, and `Optional<Lease> controller()`. Nested immutable `Ticket` contains client ID and preparation sequence; `Lease` contains client ID and ownership epoch. Use a single coordinator thread; P0 does not implement concurrent network handling.
 
-- [ ] Configure Java 21 build, pinned toolchain dependencies and JUnit; create tests before the production model.
-- [ ] Implement tests: initial controller is empty; first ready ticket obtains epoch 1; preparing B does not revoke A; failed/canceled preparation leaves A; an invalid ticket cannot revoke a newer preparation; ready B advances epoch; stale A input fails; disconnecting the controller clears ownership; disconnecting a noncontroller preserves ownership; a disconnected candidate's ticket cannot grant control; blank IDs are rejected.
-- [ ] Run `./gradlew test --tests '*ControlSessionTest'`; record expected feature-missing failures. On Windows use `gradlew.bat`.
-- [ ] Implement the state machine with monotonically increasing sequences; old tickets never become valid again. Readiness changes model ownership atomically; document that the later gameplay layer must establish a synchronization boundary before calling it.
-- [ ] Rerun tests; require zero failures. Commit only the new project files for this task.
+- [x] Configure Java 21 build, pinned toolchain dependencies and JUnit; create tests before the production model.
+- [x] Implement tests: initial controller is empty; first ready ticket obtains epoch 1; preparing B does not revoke A; failed/canceled preparation leaves A; an invalid ticket cannot revoke a newer preparation; ready B advances epoch; stale A input fails; disconnecting the controller clears ownership; disconnecting a noncontroller preserves ownership; a disconnected candidate's ticket cannot grant control; blank IDs are rejected.
+- [x] Run `./gradlew test --tests '*ControlSessionTest'`; record expected feature-missing failures. On Windows use `gradlew.bat`.
+- [x] Implement the state machine with monotonically increasing sequences; old tickets never become valid again. Readiness changes model ownership atomically; document that the later gameplay layer must establish a synchronization boundary before calling it.
+- [x] Rerun tests; require zero failures. Commit only the new project files for this task.
 
 ### Task 2: Additive client-only diagnostic mod
 
 **Interfaces:** `DiagnosticSnapshot` contains only schema version `1`, application version, Minecraft version, Fabric Loader version, curated mod versions, heap used/max bytes and lifecycle state. `toJson()` emits only those fields. The curated mod IDs are `fabricloader`, `fabric-api`, `saoui`, `mcef`, `minecraft_handoff`; no inventory of arbitrary files or system properties. `HandoffClient implements ClientModInitializer` consumes this snapshot.
 
-- [ ] Add `DiagnosticSnapshotTest`: valid JSON and schema 1; allowlist output only; correct escaping; null/missing optional mod versions represented as absent; negative memory values rejected. Supply sensitive-looking unrelated test data to confirm the serializer has no generic property map input or arbitrary diagnostic dump path.
-- [ ] Run the test and record the expected missing-feature failure.
-- [ ] Implement the immutable snapshot and JSON serialization using a declared library or a well-defined serializer; do not hand-build unescaped JSON strings.
-- [ ] Add client entrypoint using public Fabric lifecycle events. Record initialization and JOIN/DISCONNECT counts, not server address or username. Every 60 seconds record JVM heap used/max and current lifecycle; avoid blocking client tick. Use a namespaced logger, do not read token values or network payloads.
-- [ ] Create metadata: ID `minecraft_handoff`, version `0.1.0`, environment `client`, Minecraft `1.21.4`, Java `>=21`, loader `>=0.20.1`, Fabric API dependency. Do not add gameplay mixins or modify the original mod metadata.
-- [ ] Run full test suite and compile/remap the mod. Commit the adapter and tests after success.
+- [x] Add `DiagnosticSnapshotTest`: valid JSON and schema 1; allowlist output only; correct escaping; null/missing optional mod versions represented as absent; negative memory values rejected. Supply sensitive-looking unrelated test data to confirm the serializer has no generic property map input or arbitrary diagnostic dump path.
+- [x] Run the test and record the expected missing-feature failure.
+- [x] Implement the immutable snapshot and JSON serialization using a declared library or a well-defined serializer; do not hand-build unescaped JSON strings.
+- [x] Add client entrypoint using public Fabric lifecycle events. Record initialization and JOIN/DISCONNECT counts, not server address or username. Every 60 seconds record JVM heap used/max and current lifecycle; avoid blocking client tick. Use a namespaced logger, do not read token values or network payloads.
+- [x] Create metadata: ID `minecraft_handoff`, version `0.1.0`, environment `client`, Minecraft `1.21.4`, Java `>=21`, loader `>=0.20.1`, Fabric API dependency. Do not add gameplay mixins or modify the original mod metadata.
+- [x] Run full test suite and compile/remap the mod. Commit the adapter and tests after success.
 
 ### Task 3: Verify artifact and document actual acceptance
 
 **Interfaces:** Gradle task `verifyModArtifact` consumes `remapJar` and verifies the final distributable, not just development classes. README gives Windows and Mac build/install commands and clearly labels P0's limits.
 
-- [ ] Add artifact checks for metadata, the exact entrypoint class, `ControlSession` and `DiagnosticSnapshot`; reject accidental inclusion of runtime logs, tokens, third-party mod JARs or test classes. Confirm the checks fail on a temporary malformed archive before accepting the validator.
-- [ ] Run `gradlew.bat clean test build verifyModArtifact`; require exit 0, inspect test summary and final JAR contents. Record exact build versions and SHA-256 of the distributable.
-- [ ] Document manual launcher test: close game; copy only the new JAR into mods; launch normally; confirm the initialized message and original SAO login; check JOIN/DISCONNECT and memory records; remove only this new JAR to roll back. Do not package launcher credentials or the third-party modpack.
-- [ ] Document Mac validation as pending until performed on the user's M1. Do not equate Windows compilation with successful launcher loading or actual handoff.
-- [ ] Deliver source and JAR with explicit implemented/pending status. P1 planning begins after P0 acceptance; P1 needs actual Minecraft snapshot and operation-transfer research.
+- [x] Add artifact checks for metadata, the exact entrypoint class, `ControlSession` and `DiagnosticSnapshot`; reject accidental inclusion of runtime logs, tokens, third-party mod JARs or test classes. Confirm the checks fail on a temporary malformed archive before accepting the validator.
+- [x] Run `gradlew.bat clean test build verifyModArtifact`; require exit 0, inspect test summary and final JAR contents. Record exact build versions and SHA-256 of the distributable.
+- [x] Document manual launcher test: close game; copy only the new JAR into mods; launch normally; confirm the initialized message and original SAO login; check JOIN/DISCONNECT and memory records; remove only this new JAR to roll back. Do not package launcher credentials or the third-party modpack.
+- [x] Document Mac validation as pending until performed on the user's M1. Do not equate Windows compilation with successful launcher loading or actual handoff.
+- [x] Deliver source and JAR with explicit implemented/pending status. P1 planning begins after P0 acceptance; P1 needs actual Minecraft snapshot and operation-transfer research.
 
 ## Verification Boundaries
 
@@ -83,3 +83,7 @@ Unit tests prove ownership model and diagnostic boundaries. Artifact checks prov
 - Fabric official build example: https://raw.githubusercontent.com/FabricMC/fabric-example-mod/1.21.4/build.gradle
 
 The official example currently references a moving Loom snapshot; this plan requires replacing that with an explicitly verified released version during setup.
+
+## Execution status — 2026-11-11
+
+All three implementation tasks completed. Launcher/Mac acceptance remains pending as documented in README and docs/P0-VALIDATION.md; the checked installation step means the procedure was documented, not that Mac execution occurred.

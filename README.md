@@ -92,3 +92,5 @@ chmod +x gradlew
 - [驗證結果與限制](docs/P0-VALIDATION.md)
 
 後續 P1 需要實作實際遊戲入口、世界狀態重建、操作轉交與上游連線協調；P2 才逐項驗證 SAO 任務、技能、隊伍與自訂介面。所有階段的範圍與成功標準以設計文件為準。
+
+Gradle Wrapper 取自官方 8.12 發佈來源；原始授權文字保留於 [Gradle 授權文件](licenses/gradle-8.12-LICENSE.txt)。
