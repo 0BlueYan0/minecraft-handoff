@@ -9,8 +9,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class ArtifactContractTest {
  @Test void installedArtifactHasEveryDeclaredStateFieldAndQuestRecordComponent()throws Exception{
   String path=System.getenv("HANDOFF_SAO_JAR");Assumptions.assumeTrue(path!=null,"Set HANDOFF_SAO_JAR for offline installed-mod contract verification");Path file=Path.of(path);
-  assertEquals(SaoSchema.SHA256,HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file))));
   try(var zip=new ZipFile(file.toFile())){
+   String actual=SaoSchema.fingerprint(name->{var entry=zip.getEntry(name.replace('.','/')+".class");if(entry==null)return null;try(var in=zip.getInputStream(entry)){return in.readAllBytes();}catch(java.io.IOException e){throw new java.io.UncheckedIOException(e);}});
+   System.out.println("CONTRACT_FINGERPRINT "+file.getFileName()+" "+actual);
+   assertEquals(SaoSchema.CONTRACT_FINGERPRINT,actual);
    for(var e:SaoSchema.CLASSES.entrySet()){Set<String> names=fields(zip,e.getValue());assertTrue(names.containsAll(SaoSchema.FIELDS.get(e.getKey())),e.getKey());}
    assertTrue(fields(zip,"fr.sao.saoui.skills.SkillStatusClient").contains("lastTickNanos"));
    assertTrue(fields(zip,"fr.sao.questtracker.model.QuestHudState").containsAll(SaoSchema.QUEST_FIELDS));

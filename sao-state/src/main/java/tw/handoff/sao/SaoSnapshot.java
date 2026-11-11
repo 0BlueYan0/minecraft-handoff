@@ -9,16 +9,28 @@ import java.util.*;
 public final class SaoSnapshot {
  private static final StateValues VALUES=new StateValues(SaoSchema.VALUES,Set.of("fr.sao.equipment.EquipmentClient$Slot#item"));
  private static final Set<String> NULLABLE_FIELDS=Set.of("mux.sendable","equipment.state","equipment.presets");
- public static JsonObject capture(ClassLoader loader,long now)throws Exception{verifyArtifact(loader);return captureFields(loader,now);}
- public static void verifyArtifact(ClassLoader loader)throws Exception{
+ public static JsonObject capture(ClassLoader loader,long now)throws Exception{return captureFields(loader,now,verifyArtifact(loader));}
+ /** Returns the contract fingerprint of the loaded SAO JAR; throws unless it equals SaoSchema.CONTRACT_FINGERPRINT. */
+ public static String verifyArtifact(ClassLoader loader)throws Exception{
   Class<?> type=Class.forName("fr.sao.net.Mux",false,loader);var url=type.getProtectionDomain().getCodeSource().getLocation();
   if(!url.getProtocol().equals("file"))throw new IllegalArgumentException("Unsupported SAO artifact location");Path jar=Path.of(url.toURI()).toRealPath();
   if(!Files.isRegularFile(jar))throw new IllegalArgumentException("Unsupported SAO artifact");
-  var hash=MessageDigest.getInstance("SHA-256");try(var in=Files.newInputStream(jar)){byte[] bytes=new byte[65536];int n;while((n=in.read(bytes))>=0)if(n>0)hash.update(bytes,0,n);}
-  if(!HexFormat.of().formatHex(hash.digest()).equals(SaoSchema.SHA256))throw new IllegalArgumentException("SAO version requires a new state contract");
+  String actual;
+  try(var zip=new java.util.zip.ZipFile(jar.toFile())){
+   actual=SaoSchema.fingerprint(name->{
+    try{
+     Class<?> c=Class.forName(name,false,loader);var source=c.getProtectionDomain().getCodeSource();
+     if(source==null||!source.getLocation().getProtocol().equals("file")||!Path.of(source.getLocation().toURI()).toRealPath().equals(jar))return null;
+     var entry=zip.getEntry(name.replace('.','/')+".class");if(entry==null)return null;try(var in=zip.getInputStream(entry)){return in.readAllBytes();}
+    }catch(ClassNotFoundException|LinkageError|java.io.IOException|java.net.URISyntaxException missing){return null;}
+   });
+  }
+  if(!actual.equals(SaoSchema.CONTRACT_FINGERPRINT))throw new IllegalArgumentException("SAO version requires a new state contract");
+  return actual;
  }
- static JsonObject captureFields(ClassLoader loader,long now)throws Exception{
-  var out=new JsonObject();out.addProperty("schema",1);out.addProperty("artifact",SaoSchema.SHA256);out.addProperty("capturedNanos",now);var sections=new JsonObject();out.add("sections",sections);
+ static JsonObject captureFields(ClassLoader loader,long now)throws Exception{return captureFields(loader,now,SaoSchema.CONTRACT_FINGERPRINT);}
+ static JsonObject captureFields(ClassLoader loader,long now,String artifact)throws Exception{
+  var out=new JsonObject();out.addProperty("schema",1);out.addProperty("artifact",artifact);out.addProperty("capturedNanos",now);var sections=new JsonObject();out.add("sections",sections);
   for(var e:SaoSchema.CLASSES.entrySet()){Class<?> c=Class.forName(e.getValue(),false,loader);var section=new JsonObject();for(String name:SaoSchema.FIELDS.get(e.getKey())){Object value=field(c,name).get(null);synchronized(value==null?c:value){section.add(name,VALUES.encode(value));}}sections.add(e.getKey(),section);}
   Class<?> store=Class.forName("fr.sao.questtracker.model.QuestHudStore",false,loader);Object raw=field(store,"STATES").get(null);var quests=new JsonArray();
   if(!(raw instanceof Map<?,?> states)||states.size()>256)throw new IllegalArgumentException("Invalid quest state");
@@ -33,15 +45,19 @@ public final class SaoSnapshot {
 
  /** Validates and constructs every replacement before returning a plan; no field writes here. */
  public static RestorePlan prepare(ClassLoader loader,JsonObject document,long elapsedNanos)throws Exception{
-  long start=System.nanoTime();verifyArtifact(loader);return prepareFields(loader,document,Math.addExact(elapsedNanos,System.nanoTime()-start));
+  long start=System.nanoTime();String local=verifyArtifact(loader);return prepareFields(loader,document,Math.addExact(elapsedNanos,System.nanoTime()-start),System::nanoTime,local);
  }
  static RestorePlan prepareFields(ClassLoader loader,JsonObject document,long elapsedNanos)throws Exception{
   return prepareFields(loader,document,elapsedNanos,System::nanoTime);
  }
  static RestorePlan prepareFields(ClassLoader loader,JsonObject document,long elapsedNanos,java.util.function.LongSupplier clock)throws Exception{
+  return prepareFields(loader,document,elapsedNanos,clock,SaoSchema.CONTRACT_FINGERPRINT);
+ }
+ /** The snapshot and this client must both carry the pinned contract fingerprint; any other value is refused. */
+ static RestorePlan prepareFields(ClassLoader loader,JsonObject document,long elapsedNanos,java.util.function.LongSupplier clock,String localArtifact)throws Exception{
   long preparationStarted=clock.getAsLong();
   if(elapsedNanos<0)throw new IllegalArgumentException("Snapshot age unavailable");bounded(document);JsonObject data=document.deepCopy();
-  if(!data.keySet().equals(Set.of("schema","artifact","capturedNanos","sections","quests"))||data.get("schema").getAsInt()!=1||!data.get("artifact").getAsString().equals(SaoSchema.SHA256))throw new IllegalArgumentException("Snapshot contract mismatch");
+  if(!data.keySet().equals(Set.of("schema","artifact","capturedNanos","sections","quests"))||data.get("schema").getAsInt()!=1||!data.get("artifact").isJsonPrimitive()||!SaoSchema.CONTRACT_FINGERPRINT.equals(localArtifact)||!data.get("artifact").getAsString().equals(localArtifact))throw new IllegalArgumentException("Snapshot contract mismatch");
   var sections=data.getAsJsonObject("sections");if(!sections.keySet().equals(SaoSchema.CLASSES.keySet()))throw new IllegalArgumentException("Incomplete state sections");
   var changes=new ArrayList<Change>();
   for(var e:SaoSchema.CLASSES.entrySet()){

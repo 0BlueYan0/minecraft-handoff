@@ -21,10 +21,10 @@ Mac M1 / 8GB 可作常駐端；Windows 是操作端。另有香港6C12G、台灣
 ## 環境與建置
 
 - Minecraft1.21.4、Fabric Loader0.20.1、Fabric API0.119.4+1.21.4。
-- SAOUI2.51.13，SHA256：`2e73a789779e14630e68b5053732eaaaba1fe99dadeff2c2a3f6efd682a58979`。
+- SAOUI：2026-11-11 22:24 啟動器自動從2.51.13更新成2.51.14（`4e31858d…`）。sao-state不再比對整包hash，改比對`SaoSchema.CONTRACT_CLASSES`（本模組讀寫／建構的23個類別）的bytecode指紋`CONTRACT_FINGERPRINT`；2.51.13與2.51.14算出相同值。SAO更新只要這些類別沒變就不用改程式；有變會擋下，要重新比對後更新常數。
 - Windows 原始實例：`C:\Users\user\AppData\Roaming\.Triggers Client\instances\Sword Art Online`。
 - 原啟動器：`C:\Users\user\AppData\Local\Triggers Client\triggers-client.exe`。
-- Mac 歷史實例路徑：`~/Library/Application Support/Triggers Client/instances/Sword Art Online`。Mac 先前版本2.51.10，必須重新確認；state 模組目前只接受上述2.51.13精確 hash。
+- Mac 歷史實例路徑：`~/Library/Application Support/Triggers Client/instances/Sword Art Online`。Mac 先前版本2.51.10，必須重新確認；state 模組接受的是契約類別指紋相同的版本（見上一條）。
 - 可用完整 JDK21（目錄雖叫 jre）：`C:\Users\user\AppData\Roaming\.Triggers Client\runtime\jre-21.0.7-windows-x64`。有 javac/jar/keytool/jdk.attach。
 - PATH 預設 Java/Gradle 可能錯；使用專案 Gradle Wrapper8.12、Loom1.10.5。
 
@@ -139,7 +139,7 @@ NativeCapture會檢查same-user/PID、實際gameDirectory、player/level非null�
 
 | 範圍 | 最新結果 |
 |---|---|
-| sao-state | 23 tests，0 failure/error/skip（2026-11-11 補上限與未知JAR測試）；含真實installed JAR bytecode contract，以及兩次實際JVM attach拒絕不支援artifact且保留target |
+| sao-state | 28 tests，0 failure/error/skip（2026-11-11 改成契約類別指紋，新增`VersionContractTest`5項）；`ArtifactContractTest`用2.51.13與2.51.14兩個真JAR各跑一次，指紋都等於常數；Sonnet reviewer判PASS（`.herdr-work/v14/review-1.md`），建議已修 |
 | viewer-bootstrap | 10 tests全過；增加僅供host-fixture的`--fixture-no-resourcepacks`，避免模型測試複製大量外觀小檔 |
 | relay-core | 先前22 tests全過，這輪未修改 |
 | relay-bridge | 先前6 tests全過，這輪未修改 |
