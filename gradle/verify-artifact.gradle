@@ -1,0 +1,143 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
+
+def expectedModVersion = project.version.toString()
+def requiredClasses = [
+    'tw/handoff/client/HandoffClient.class',
+    'tw/handoff/core/ControlSession.class',
+    'tw/handoff/core/ControlSession$Lease.class',
+    'tw/handoff/core/ControlSession$Ticket.class',
+    'tw/handoff/core/DiagnosticRecorder.class',
+    'tw/handoff/core/DiagnosticRecorder$Status.class',
+    'tw/handoff/core/DiagnosticRecorder$Lifecycle.class',
+    'tw/handoff/core/DiagnosticSnapshot.class'
+].toSet()
+def allowedFiles = requiredClasses + ['META-INF/MANIFEST.MF', 'fabric.mod.json']
+def requireArtifact = { boolean condition, String message ->
+    if (!condition) throw new GradleException(message)
+}
+def validateArtifact = { File archive ->
+    try {
+        new ZipFile(archive).withCloseable { zip ->
+            def files = zip.entries().findAll { !it.directory }.collect { it.name }
+            requireArtifact(files.size() == files.toSet().size(), 'Duplicate archive entries')
+            requireArtifact(files.contains('fabric.mod.json'), 'Missing fabric.mod.json')
+            requireArtifact(files.containsAll(requiredClasses), 'Missing required runtime classes')
+            requireArtifact(allowedFiles.containsAll(files), 'Unexpected files in distributable')
+            def metadata = zip.getInputStream(zip.getEntry('fabric.mod.json')).withCloseable { stream ->
+                new JsonSlurper().parse(stream)
+            }
+            requireArtifact(metadata instanceof Map, 'Metadata must be an object')
+            requireArtifact(metadata.schemaVersion == 1, 'Wrong metadata schema')
+            requireArtifact(metadata.id == 'minecraft_handoff', 'Wrong mod ID')
+            requireArtifact(metadata.version == expectedModVersion, 'Wrong mod version')
+            requireArtifact(metadata.environment == 'client', 'Mod must be client-only')
+            requireArtifact(metadata.entrypoints == [client: ['tw.handoff.client.HandoffClient']], 'Wrong entrypoints')
+            requireArtifact(metadata.depends instanceof Map, 'Missing dependency constraints')
+            requireArtifact(metadata.depends.minecraft == '1.21.4', 'Wrong Minecraft constraint')
+            requireArtifact(metadata.depends.fabricloader == '>=0.20.1', 'Wrong Fabric Loader constraint')
+            requireArtifact(metadata.depends.java == '>=21', 'Wrong Java constraint')
+            requireArtifact(metadata.depends['fabric-api'] == '*', 'Missing Fabric API dependency')
+            requireArtifact(!metadata.containsKey('jars') && !metadata.containsKey('mixins'), 'Unexpected embedded jars or mixins')
+            requiredClasses.each { name ->
+                byte[] bytes = zip.getInputStream(zip.getEntry(name)).withCloseable { it.bytes }
+                requireArtifact(bytes.length >= 8 && (0..<4).collect { bytes[it] & 0xff } == [202, 254, 186, 190], "Invalid class: ${name}")
+                requireArtifact((bytes[4] & 0xff) == 0 && (bytes[5] & 0xff) == 0 &&
+                        (bytes[6] & 0xff) * 256 + (bytes[7] & 0xff) == 65, "Class must target Java 21 without preview: ${name}")
+            }
+        }
+    } catch (GradleException failure) {
+        throw failure
+    } catch (Exception failure) {
+        throw new GradleException('Cannot validate mod archive', failure)
+    }
+}
+
+tasks.register('verifyModArtifactFixtures') {
+    group = 'verification'
+    description = 'Exercises the distributable validator with valid and deliberately malformed archives.'
+    dependsOn tasks.named('remapJar')
+    doLast {
+        Map<String, byte[]> original = [:]
+        new ZipFile(tasks.remapJar.archiveFile.get().asFile).withCloseable { zip ->
+            zip.entries().findAll { !it.directory }.each { entry ->
+                original[entry.name] = zip.getInputStream(entry).withCloseable { it.bytes }
+            }
+        }
+        File folder = layout.buildDirectory.dir('tmp/artifact-fixtures').get().asFile
+        folder.mkdirs()
+        def writeJar = { String name, Map<String, byte[]> content ->
+            File target = new File(folder, name + '.jar')
+            new ZipOutputStream(new FileOutputStream(target)).withCloseable { out ->
+                content.each { path, bytes ->
+                    out.putNextEntry(new ZipEntry(path))
+                    out.write(bytes)
+                    out.closeEntry()
+                }
+            }
+            target
+        }
+        validateArtifact(writeJar('valid', original))
+        int rejected = 0
+        def reject = { String name, Map<String, byte[]> content ->
+            boolean failed = false
+            try { validateArtifact(writeJar(name, content)) }
+            catch (GradleException expected) { failed = true }
+            if (!failed) throw new GradleException("Malformed fixture unexpectedly accepted: ${name}")
+            rejected++
+        }
+        def without = { String name -> def copy = new LinkedHashMap(original); copy.remove(name); copy }
+        reject('missing-metadata', without('fabric.mod.json'))
+        reject('invalid-json', original + ['fabric.mod.json': '{'.getBytes('UTF-8')])
+        ['tw/handoff/client/HandoffClient.class', 'tw/handoff/core/ControlSession.class',
+         'tw/handoff/core/ControlSession$Lease.class', 'tw/handoff/core/ControlSession$Ticket.class',
+         'tw/handoff/core/DiagnosticRecorder.class', 'tw/handoff/core/DiagnosticRecorder$Status.class',
+         'tw/handoff/core/DiagnosticRecorder$Lifecycle.class', 'tw/handoff/core/DiagnosticSnapshot.class'].eachWithIndex { name, index ->
+            reject("missing-class-${index}", without(name))
+        }
+        ['logs/latest.log', 'launcher.token', 'secrets.properties', 'mods/third-party.jar',
+         'tw/handoff/core/ControlSessionTest.class'].eachWithIndex { name, index ->
+            reject("unexpected-file-${index}", original + [(name): 'private fixture'.getBytes('UTF-8')])
+        }
+        def mutateMetadata = { Closure mutation ->
+            def metadata = new JsonSlurper().parse(original['fabric.mod.json'])
+            mutation(metadata)
+            original + ['fabric.mod.json': JsonOutput.toJson(metadata).getBytes('UTF-8')]
+        }
+        reject('wrong-entrypoint', mutateMetadata { it.entrypoints.client = ['missing.Client'] })
+        reject('server-entrypoint', mutateMetadata { it.entrypoints.main = ['unexpected.Main'] })
+        reject('wrong-environment', mutateMetadata { it.environment = '*' })
+        reject('wrong-id', mutateMetadata { it.id = 'wrong' })
+        reject('wrong-schema', mutateMetadata { it.schemaVersion = 99 })
+        reject('wrong-version', mutateMetadata { it.version = '99.0' })
+        reject('wrong-minecraft', mutateMetadata { it.depends.minecraft = '*' })
+        reject('wrong-loader', mutateMetadata { it.depends.fabricloader = '*' })
+        reject('wrong-java', mutateMetadata { it.depends.java = '>=17' })
+        reject('missing-fabric-api', mutateMetadata { it.depends.remove('fabric-api') })
+        reject('nested-jar', mutateMetadata { it.jars = [[file: 'private.jar']] })
+        reject('unexpected-mixin', mutateMetadata { it.mixins = ['unexpected.mixins.json'] })
+        def brokenClass = Arrays.copyOf(original['tw/handoff/client/HandoffClient.class'], original['tw/handoff/client/HandoffClient.class'].length)
+        brokenClass[0] = 0
+        reject('invalid-class', original + ['tw/handoff/client/HandoffClient.class': brokenClass])
+        def newerClass = Arrays.copyOf(original['tw/handoff/client/HandoffClient.class'], original['tw/handoff/client/HandoffClient.class'].length)
+        newerClass[7] = 67
+        reject('wrong-bytecode', original + ['tw/handoff/client/HandoffClient.class': newerClass])
+        logger.lifecycle("Artifact fixtures passed: 1 valid accepted, ${rejected} malformed rejected")
+    }
+}
+
+tasks.register('verifyModArtifact') {
+    group = 'verification'
+    description = 'Verifies the actual remapped distributable and the malformed-archive fixtures.'
+    dependsOn tasks.named('remapJar'), tasks.named('verifyModArtifactFixtures')
+    doLast {
+        File archive = tasks.remapJar.archiveFile.get().asFile
+        validateArtifact(archive)
+        logger.lifecycle("Verified distributable: ${archive.name}")
+    }
+}
+
+tasks.named('check') { dependsOn tasks.named('verifyModArtifact') }
