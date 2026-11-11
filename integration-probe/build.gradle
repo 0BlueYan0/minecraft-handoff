@@ -1,8 +1,10 @@
 // Private-world test tool only. Never included in the delivered runtime package.
 plugins { id 'fabric-loom' }
+evaluationDependsOn(':sao-state')
 version='0.2.0'
 loom { splitEnvironmentSourceSets() }
 dependencies {
+ implementation project(':sao-state')
  minecraft 'com.mojang:minecraft:1.21.4'
  mappings loom.officialMojangMappings()
  modImplementation 'net.fabricmc:fabric-loader:0.20.1'

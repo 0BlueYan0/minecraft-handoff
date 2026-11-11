@@ -14,3 +14,6 @@ run-agent-smoke/
 **/pairing.json
 **/host.p12
 **/keystore.password
+/work/
+/handoff-artifacts/
+/handoff-evidence/

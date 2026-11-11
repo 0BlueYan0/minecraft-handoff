@@ -13,6 +13,7 @@ public final class ClientProbe {
   Minecraft mc=(Minecraft)value;Path marker=mc.gameDirectory.toPath().resolve(".handoff-viewer");
   if(!Files.isRegularFile(marker)||!Files.readString(marker).equals("MinecraftHandoffViewer:1"))throw new IllegalStateException("Only isolated private fixtures are allowed");
   if(output!=null)throw new IllegalStateException("Probe already running");
+  if(operation.equals("saoRoundtrip")){Files.writeString(status,SaoFixtureRoundtrip.run(mc));return;}
   if(operation.equals("labStatus")){Files.writeString(status,(String)Class.forName("tw.handoff.lab.LabClient",false,mc.getClass().getClassLoader()).getMethod("status").invoke(null));return;}
   if(operation.equals("nativeAttack")){mc.setScreen(null);mc.gameRenderer.pick(1);for(String name:new String[]{"startAttack","method_1536"})try{var method=mc.getClass().getDeclaredMethod(name);method.setAccessible(true);method.invoke(mc);Files.writeString(status,"NATIVE_ATTACK_SWINGING="+mc.player.swinging);return;}catch(NoSuchMethodException absent){}throw new IllegalStateException("Attack mapping unavailable");}
   command=operation;output=status;remaining=operation.equals("walk")?20:operation.equals("dig")?8:5;

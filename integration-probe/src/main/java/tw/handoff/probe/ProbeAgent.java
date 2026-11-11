@@ -12,7 +12,8 @@ public final class ProbeAgent {
   try{
    Class<?> mc=null;for(Class<?> c:instrumentation.getAllLoadedClasses())if(c.getName().equals("net.minecraft.class_310")||c.getName().equals("net.minecraft.client.Minecraft"))mc=c;
    if(mc==null)throw new IllegalStateException("No client");Object instance=null;for(String name:new String[]{"method_1551","getInstance"})try{instance=mc.getMethod(name).invoke(null);break;}catch(NoSuchMethodException absent){}
-   if(loader==null)loader=new URLClassLoader(new URL[]{ProbeAgent.class.getProtectionDomain().getCodeSource().getLocation()},mc.getClassLoader()){
+   URL[] urls=p.length==3?new URL[]{ProbeAgent.class.getProtectionDomain().getCodeSource().getLocation(),Path.of(new String(Base64.getUrlDecoder().decode(p[2]),StandardCharsets.UTF_8)).toUri().toURL()}:new URL[]{ProbeAgent.class.getProtectionDomain().getCodeSource().getLocation()};
+   if(loader==null||p.length==3)loader=new URLClassLoader(urls,mc.getClassLoader()){
     protected Class<?> loadClass(String name,boolean resolve)throws ClassNotFoundException{synchronized(getClassLoadingLock(name)){Class<?> c=findLoadedClass(name);if(c==null&&name.startsWith("tw.handoff.probe.client."))c=findClass(name);if(c==null)c=super.loadClass(name,false);if(resolve)resolveClass(c);return c;}}
    };
    Object target=instance;((Executor)instance).execute(()->{try{Class.forName("tw.handoff.probe.client.ClientProbe",true,loader).getMethod("run",Object.class,String.class,Path.class).invoke(null,target,p[0],status);}catch(Throwable e){try{Files.writeString(status,"PROBE_FAILED:"+e.getClass().getSimpleName());}catch(Exception ignored){}}});

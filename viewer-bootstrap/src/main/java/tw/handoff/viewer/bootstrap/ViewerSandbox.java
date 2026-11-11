@@ -37,6 +37,9 @@ final class ViewerSandbox {
         if(Files.exists(marker)&&!Files.readString(marker).equals(MARKER))throw new IOException("Invalid viewer directory marker");Files.writeString(marker,MARKER);
     }
     static void prepare(Path install,Path source,Path viewer,boolean vanilla)throws IOException{
+        prepare(install,source,viewer,vanilla,true);
+    }
+    static void prepare(Path install,Path source,Path viewer,boolean vanilla,boolean resourcePacks)throws IOException{
         claim(install,viewer);
         Path input=install.toRealPath(),out=viewer.toAbsolutePath().normalize();
         if(out.startsWith(input)||input.startsWith(out))throw new IOException("Viewer data must be separate from the managed installation");
@@ -58,11 +61,11 @@ final class ViewerSandbox {
         // This marked profile owns its top-level mods mirror. Remove stale versions after a source update.
         try(var old=Files.list(out.resolve("mods"))){for(Path file:old.filter(p->Files.isRegularFile(p,LinkOption.NOFOLLOW_LINKS)&&p.getFileName().toString().endsWith(".jar")).toList())if(!expected.contains(file.getFileName().toString()))Files.delete(output(out,file));}
         if(!vanilla){
-            copyTree(source.resolve("resourcepacks"),out,out.resolve("resourcepacks"),false);
+            if(resourcePacks)copyTree(source.resolve("resourcepacks"),out,out.resolve("resourcepacks"),false);
             copyTree(source.resolve("mods/mcef-libraries"),out,out.resolve("mods/mcef-libraries"),true);
         }
         Path options=output(out,out.resolve("options.txt"));
-        if(!Files.exists(options))Files.writeString(options,"lang:zh_tw\nrenderDistance:6\nsimulationDistance:5\nmaxFps:60\nenableVsync:false\nresourcePacks:"+(vanilla?"[\"vanilla\",\"fabric\"]":"[\"vanilla\",\"fabric\",\"file/sao\"]")+"\n");
+        if(!Files.exists(options))Files.writeString(options,"lang:zh_tw\nrenderDistance:6\nsimulationDistance:5\nmaxFps:60\nenableVsync:false\nresourcePacks:"+(vanilla||!resourcePacks?"[\"vanilla\",\"fabric\"]":"[\"vanilla\",\"fabric\",\"file/sao\"]")+"\n");
         Path iris=output(out,out.resolve("config/iris.properties"));if(!Files.exists(iris))Files.writeString(iris,"enableShaders=false\n");
     }
     private static boolean isFabricApi(Path jar)throws IOException{

@@ -6,6 +6,10 @@ import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
 class ViewerSandboxTest {
     @TempDir Path temp;
+    @Test void modelFixtureCanLoadModsWithoutCopyingOptionalResourcePacks()throws Exception{
+        Path install=Files.createDirectory(temp.resolve("install")),source=install.resolve("instances/Sword Art Online"),viewer=temp.resolve("viewer");Files.createDirectories(source.resolve("mods"));Files.writeString(source.resolve("mods/example.jar"),"code");Files.createDirectories(source.resolve("resourcepacks/sao"));Files.writeString(source.resolve("resourcepacks/sao/pack.mcmeta"),"{}");
+        ViewerSandbox.prepare(install,source,viewer,false,false);assertTrue(Files.exists(viewer.resolve("mods/example.jar")));assertFalse(Files.exists(viewer.resolve("resourcepacks")));assertFalse(Files.readString(viewer.resolve("options.txt")).contains("file/sao"));
+    }
     @Test void sourceModUpgradeRemovesOldManagedJar()throws Exception{
         Path install=Files.createDirectory(temp.resolve("install")),source=install.resolve("instances/Sword Art Online"),mods=Files.createDirectories(source.resolve("mods")),viewer=temp.resolve("viewer");
         Files.writeString(mods.resolve("old.jar"),"v1");ViewerSandbox.prepare(install,source,viewer,false);

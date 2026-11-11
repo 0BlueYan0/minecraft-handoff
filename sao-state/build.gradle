@@ -1,0 +1,17 @@
+plugins { id 'java' }
+version='0.3.0'
+repositories { mavenCentral() }
+dependencies {
+ implementation 'com.google.code.gson:gson:2.11.0'
+ testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+ testImplementation 'org.ow2.asm:asm:9.7.1'
+ testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+}
+tasks.withType(JavaCompile).configureEach { options.release=21;options.encoding='UTF-8';options.compilerArgs+=['--add-modules','jdk.attach'] }
+jar {
+ duplicatesStrategy=DuplicatesStrategy.EXCLUDE
+ manifest { attributes 'Main-Class':'tw.handoff.sao.probe.StateProbeMain','Agent-Class':'tw.handoff.sao.probe.StateProbeAgent' }
+ from { configurations.runtimeClasspath.collect { it.isDirectory()?it:zipTree(it) } }
+ exclude 'META-INF/*.SF','META-INF/*.RSA','META-INF/*.DSA'
+}
+test { useJUnitPlatform();dependsOn jar;systemProperty 'handoff.saoProbeJar',tasks.jar.archiveFile.get().asFile.absolutePath;testLogging {events 'passed','failed','skipped'} }
