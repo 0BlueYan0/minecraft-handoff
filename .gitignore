@@ -1,0 +1,11 @@
+.gradle/
+build/
+run/
+logs/
+*.log
+.env
+.env.*
+secrets.properties
+**/credentials*
+**/tokens*
+.DS_Store
