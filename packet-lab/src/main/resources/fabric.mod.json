@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"handoff_packet_lab_fixture","version":"0.2.0","environment":"*","entrypoints":{"main":["tw.handoff.lab.LabMod"],"client":["tw.handoff.lab.LabClient"]},"depends":{"fabricloader":">=0.20.1","minecraft":"1.21.4","fabric-api":"*"}}

@@ -1,0 +1,18 @@
+pluginManagement {
+    repositories {
+        maven { url = 'https://maven.fabricmc.net/' }
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+rootProject.name = 'minecraft-handoff'
+include 'launcher-helper'
+include 'runtime-agent'
+include 'relay-core'
+include 'relay-bridge'
+include 'viewer-mod'
+include 'viewer-bootstrap'
+include 'handoff-service'
+include 'integration-probe'
+include 'packet-lab'
+include 'sao-state'

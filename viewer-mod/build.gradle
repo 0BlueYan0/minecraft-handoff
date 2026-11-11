@@ -1,0 +1,24 @@
+plugins { id 'fabric-loom' }
+evaluationDependsOn(':relay-core')
+version='0.2.0'
+group='tw.handoff'
+repositories { mavenCentral() }
+loom {
+    splitEnvironmentSourceSets()
+    mods { handoff_viewer { sourceSet sourceSets.main; sourceSet sourceSets.client } }
+    mixin {
+        useLegacyMixinAp = true
+        defaultRefmapName = 'handoff-viewer-refmap.json'
+        add sourceSets.client, 'handoff-viewer-refmap.json'
+    }
+}
+dependencies {
+    minecraft 'com.mojang:minecraft:1.21.4'
+    mappings loom.officialMojangMappings()
+    modImplementation 'net.fabricmc:fabric-loader:0.20.1'
+    modImplementation 'net.fabricmc.fabric-api:fabric-api:0.119.4+1.21.4'
+    implementation project(':relay-core')
+}
+tasks.withType(JavaCompile).configureEach { options.release=21; options.encoding='UTF-8' }
+java { sourceCompatibility=JavaVersion.VERSION_21; targetCompatibility=JavaVersion.VERSION_21 }
+jar { dependsOn project(':relay-core').tasks.named('classes'); from project(':relay-core').sourceSets.main.output }

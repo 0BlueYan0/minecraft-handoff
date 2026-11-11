@@ -1,0 +1,27 @@
+plugins { id 'java' }
+version = '0.1.2'
+repositories { mavenCentral() }
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+}
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['--add-modules', 'jdk.attach']
+}
+jar {
+    archiveBaseName = 'handoff-runtime-agent'
+    manifest { attributes 'Main-Class': 'tw.handoff.agent.AttachClient',
+            'Agent-Class': 'tw.handoff.agent.RuntimeAgent',
+            'Can-Redefine-Classes': 'false', 'Can-Retransform-Classes': 'false' }
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+test {
+    useJUnitPlatform()
+    jvmArgs '--add-modules', 'jdk.attach'
+    dependsOn jar
+    systemProperty 'handoff.agentJar', tasks.jar.archiveFile.get().asFile.absolutePath
+    testLogging { events 'passed', 'skipped', 'failed' }
+}
