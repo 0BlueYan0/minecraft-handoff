@@ -44,10 +44,10 @@ public final class HostBridge {
         byte[] brand=codec.freeze(new net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket(new net.minecraft.network.protocol.common.custom.BrandPayload("join-wire-id"))).getFirst();
         return tw.handoff.relay.core.OpaqueFrames.readVarInt(brand,new int[]{0});
     }
-    public static String start(Object client,Path directory,int port)throws Exception{
+    public static String start(Object client,Path directory,int port,boolean generic)throws Exception{
         Minecraft mc=(Minecraft)client;
         if(!mc.gameDirectory.toPath().toRealPath().equals(directory.toRealPath()))throw new IllegalStateException("Wrong game instance");
-        HostBridge host=new HostBridge(mc);PacketLab.Mode labMode=PacketLab.mode(mc);if(labMode!=null)host.lab=new PacketLab(host,host.upstream,labMode);host.frontend=new NativeFrontend(host,port);host.control=new RemoteControl(host);
+        HostBridge host=new HostBridge(mc);PacketLab.Mode labMode=PacketLab.mode(mc,generic);LOG.info("Packet forwarding mode: {}",labMode==null?"OFF":labMode);if(labMode!=null)host.lab=new PacketLab(host,host.upstream,labMode);host.frontend=new NativeFrontend(host,port);host.control=new RemoteControl(host);
         if(host.lab!=null)host.lab.install();
         host.upstream.eventLoop().submit(()->host.upstream.pipeline().addBefore("packet_handler","handoff_relay_capture",new ChannelDuplexHandler(){
             public void channelRead(ChannelHandlerContext context,Object message)throws Exception{

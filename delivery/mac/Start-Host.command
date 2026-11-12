@@ -22,7 +22,10 @@ GAME_PID="${HANDOFF_PID:-}"
 if [ -z "$GAME_PID" ]; then read -r -p "Original Minecraft PID from the list above: " GAME_PID;fi
 PAIR_HOST="${HANDOFF_HOST:-}"
 if [ -z "$PAIR_HOST" ]; then read -r -p "Mac LAN/VPN address reachable from Windows (for example 192.168.1.20): " PAIR_HOST;fi
+# Packet forwarding is on by default; run with HANDOFF_GENERIC=0 to turn it off.
+GENERIC="--generic"
+if [ "${HANDOFF_GENERIC:-1}" = "0" ]; then GENERIC=""; fi
 echo "Host requires an awake Mac and the original game engine. Ctrl+C ends remote access only."
 caffeinate -i "$JAVA" --add-modules jdk.attach -jar "$HERE/lib/handoff-service-0.2.0.jar" host \
   --pid "$GAME_PID" --game-dir "$GAME" --relay-jar "$HERE/lib/relay-bridge-0.2.0.jar" \
-  --state "$STATE" --pair-host "$PAIR_HOST" --port "${HANDOFF_PORT:-25575}"
+  --state "$STATE" --pair-host "$PAIR_HOST" --port "${HANDOFF_PORT:-25575}" $GENERIC

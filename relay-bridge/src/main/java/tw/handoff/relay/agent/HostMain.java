@@ -9,7 +9,8 @@ import java.util.Base64;
 /** Initial loopback bootstrap; remote encrypted service configuration is added with transport integration. */
 public final class HostMain {
     public static void main(String[] args){
-        if(args.length!=4||!args[0].equals("--pid")||!args[2].equals("--game-dir")){System.out.println("Usage: --pid PID --game-dir INSTANCE");System.exit(2);}
+        boolean generic;
+        try{generic=parseGeneric(args);}catch(IllegalArgumentException usage){System.out.println("Usage: --pid PID --game-dir INSTANCE [--generic]");System.exit(2);return;}
         try{
             long pid=Long.parseLong(args[1]);
             ProcessHandle target=ProcessHandle.of(pid).orElseThrow();
@@ -21,7 +22,7 @@ public final class HostMain {
                 // An attached JVM keeps its agent archive open. Do not lock the distributable/build output.
                 Path agentCopy=directory.resolve("relay-agent.jar");Files.copy(self,agentCopy);
                 VirtualMachine vm=VirtualMachine.attach(Long.toString(pid));
-                try{vm.loadAgent(agentCopy.toString(),encode(status.toString())+"."+encode(game.toString())+".0");}finally{vm.detach();}
+                try{vm.loadAgent(agentCopy.toString(),agentOptions(status,game,generic));}finally{vm.detach();}
                 long start=System.nanoTime();
                 while(System.nanoTime()-start<60_000_000_000L){
                     String result=Files.readString(status);
@@ -35,5 +36,12 @@ public final class HostMain {
             }finally{try{Files.deleteIfExists(status);Files.deleteIfExists(directory);}catch(Exception ignored){}}
         }catch(Exception|LinkageError failure){System.out.println("FAILED:CLIENT:"+failure.getClass().getSimpleName());System.exit(1);}
     }
+    /** The fifth argument is the optional --generic flag. Without it the agent gets the mode field "-" (off). */
+    static boolean parseGeneric(String[] args){
+        if((args.length!=4&&args.length!=5)||!args[0].equals("--pid")||!args[2].equals("--game-dir"))throw new IllegalArgumentException("usage");
+        if(args.length==5&&!args[4].equals("--generic"))throw new IllegalArgumentException("usage");
+        return args.length==5;
+    }
+    static String agentOptions(Path status,Path game,boolean generic){return encode(status.toString())+"."+encode(game.toString())+".0."+(generic?"g":"-");}
     private static String encode(String value){return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));}
 }

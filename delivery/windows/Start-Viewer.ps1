@@ -3,7 +3,8 @@ param(
   [string]$Install = "$env:APPDATA\.Triggers Client",
   [string]$ViewerDir = "$env:LOCALAPPDATA\MinecraftHandoff\viewer",
   [string]$Java,
-  [switch]$Vanilla
+  [switch]$Vanilla,
+  [switch]$NoGeneric
 )
 $ErrorActionPreference = 'Stop'
 $packageRoot = Split-Path -Parent $PSScriptRoot
@@ -20,6 +21,8 @@ Remove-Item Env:JAVA_TOOL_OPTIONS,Env:JDK_JAVA_OPTIONS,Env:_JAVA_OPTIONS -ErrorA
 $launchArgs = @('--add-modules','jdk.attach','-jar',(Join-Path $packageRoot 'lib\handoff-service-0.2.0.jar'),'viewer',
   '--pair',$Pairing,'--install',$Install,'--viewer-dir',$ViewerDir,'--guard',(Join-Path $packageRoot 'lib\viewer-mod-0.2.0.jar'))
 if ($Vanilla) { $launchArgs += '--vanilla' }
+# Packet forwarding is on by default; pass -NoGeneric to turn it off.
+if (-not $NoGeneric) { $launchArgs += '--generic' }
 Write-Host 'Windows launches a private local viewer. Do not start a second SAO login.'
 & $Java @launchArgs
 if ($LASTEXITCODE -ne 0) { throw "Handoff viewer exited with code $LASTEXITCODE. See the guide and viewer logs." }

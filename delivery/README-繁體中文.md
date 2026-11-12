@@ -44,6 +44,8 @@ bash mac/Start-Host.command
 
 `HANDOFF_INSTALL`、`HANDOFF_STATE`、`HANDOFF_PID`、`HANDOFF_HOST`、`HANDOFF_PORT` 也可自行設定。不要傳入舊啟動器 token 或複製原遊戲啟動參數。
 
+拿到控制權之後的操作（例如裝備、技能側欄）預設會送出。要關掉時，在執行前加上 `HANDOFF_GENERIC=0`，Windows 操作端也要同時加 `-NoGeneric`。
+
 ## Windows 操作端怎麼開
 
 1. 解壓縮相同版本的包，保留資料夾結構；將 Mac 的 `pairing.json` 放在自己方便找到的位置。

@@ -14,21 +14,39 @@ public final class ServiceMain {
  static int run(String[] args)throws Exception{
   if(args.length==1&&args[0].equals("list")){for(var vm:VirtualMachine.list()){String main=vm.displayName().split(" ",2)[0];if(main.equals("net.fabricmc.loader.impl.launch.knot.KnotClient"))System.out.println("Minecraft PID "+vm.id());}return 0;}
   if(args.length<1)throw new IllegalArgumentException("Use host or viewer");
-  var options=new HashMap<String,String>();boolean vanilla=false;
-  for(int i=1;i<args.length;i++){if(args[i].equals("--vanilla")){vanilla=true;continue;}if(!args[i].startsWith("--")||i+1==args.length)throw new IllegalArgumentException();options.put(args[i],args[++i]);}
-  if(args[0].equals("host"))return host(options);
-  if(args[0].equals("viewer"))return viewer(options,vanilla);
+  var parsed=parse(args);
+  if(parsed.command().equals("host"))return host(parsed.options(),parsed.generic());
+  if(parsed.command().equals("viewer"))return viewer(parsed.options(),parsed.vanilla(),parsed.generic());
   throw new IllegalArgumentException("Use host or viewer");
  }
+ /** --vanilla and --generic are flags without a value; every other option takes one. */
+ record Parsed(String command,Map<String,String> options,boolean vanilla,boolean generic){}
+ static Parsed parse(String[] args){
+  var options=new HashMap<String,String>();boolean vanilla=false,generic=false;
+  for(int i=1;i<args.length;i++){if(args[i].equals("--vanilla")){vanilla=true;continue;}if(args[i].equals("--generic")){generic=true;continue;}if(!args[i].startsWith("--")||i+1==args.length)throw new IllegalArgumentException();options.put(args[i],args[++i]);}
+  return new Parsed(args[0],options,vanilla,generic);
+ }
+ /** The relay helper that attaches to the game; --generic is forwarded so the agent starts packet forwarding in PRODUCTION mode. */
+ static List<String> attachCommand(String java,Path relay,long pid,Path gameDirectory,boolean generic){
+  var command=new ArrayList<>(List.of(java,"--add-modules","jdk.attach","-jar",relay.toString(),"--pid",Long.toString(pid),"--game-dir",gameDirectory.toString()));
+  if(generic)command.add("--generic");
+  return command;
+ }
+ static String[] viewerArguments(Map<String,String> o,String pairPort,Pairing pair,boolean vanilla,boolean generic){
+  var args=new ArrayList<>(List.of("--install",required(o,"--install"),"--viewer-dir",required(o,"--viewer-dir"),"--guard",required(o,"--guard"),"--port",pairPort,"--name",pair.name(),"--uuid",pair.uuid()));
+  if(vanilla)args.add("--vanilla");
+  if(generic)args.add("--generic");
+  return args.toArray(String[]::new);
+ }
  private static String required(Map<String,String> o,String key){String value=o.get(key);if(value==null||value.isBlank())throw new IllegalArgumentException("Missing "+key);return value;}
- private static int host(Map<String,String> o)throws Exception{
+ private static int host(Map<String,String> o,boolean generic)throws Exception{
   Path state=Path.of(required(o,"--state")).toAbsolutePath();Files.createDirectories(state);PrivateFiles.restrict(state,true);
   try(var lockFile=FileChannel.open(state.resolve("service.lock"),StandardOpenOption.CREATE,StandardOpenOption.WRITE);var lock=lockFile.tryLock()){
    if(lock==null)throw new IllegalStateException("Host service already running");
    long pid=Long.parseLong(required(o,"--pid"));ProcessHandle game=ProcessHandle.of(pid).orElseThrow();
    Path directory=Path.of(required(o,"--game-dir")).toRealPath(),relay=Path.of(required(o,"--relay-jar")).toRealPath();
    Path javaBinary=Path.of(System.getProperty("java.home"),"bin",System.getProperty("os.name").startsWith("Windows")?"java.exe":"java");
-   ProcessBuilder attach=new ProcessBuilder(javaBinary.toString(),"--add-modules","jdk.attach","-jar",relay.toString(),"--pid",Long.toString(pid),"--game-dir",directory.toString());
+   ProcessBuilder attach=new ProcessBuilder(attachCommand(javaBinary.toString(),relay,pid,directory,generic));
    attach.environment().remove("JAVA_TOOL_OPTIONS");attach.environment().remove("JDK_JAVA_OPTIONS");attach.environment().remove("_JAVA_OPTIONS");
    attach.redirectError(ProcessBuilder.Redirect.DISCARD);Process helper=attach.start();
    if(!helper.waitFor(75,TimeUnit.SECONDS)){helper.destroyForcibly();throw new IllegalStateException("Attach timed out");}
@@ -48,16 +66,14 @@ public final class ServiceMain {
    }
   }return 0;
  }
- private static int viewer(Map<String,String> o,boolean vanilla)throws Exception{
+ private static int viewer(Map<String,String> o,boolean vanilla,boolean generic)throws Exception{
   Path pairing=Path.of(required(o,"--pair"));if(Files.size(pairing)>8192)throw new IllegalArgumentException("Invalid pairing file");
   Pairing pair;try(var reader=Files.newBufferedReader(pairing)){pair=new Gson().fromJson(reader,Pairing.class);}if(pair==null)throw new IllegalArgumentException();
   System.out.println("Checking paired host identity...");try(var probe=ClientTunnel.connect(pair)){}
   try(var tunnel=new ClientTunnel(pair)){
    tunnel.start();Runtime.getRuntime().addShutdownHook(new Thread(tunnel::close));
-   var args=new ArrayList<>(List.of("--install",required(o,"--install"),"--viewer-dir",required(o,"--viewer-dir"),"--guard",required(o,"--guard"),"--port",Integer.toString(tunnel.port()),"--name",pair.name(),"--uuid",pair.uuid()));
-   if(vanilla)args.add("--vanilla");
    System.out.println("Paired. Launching local-rendering viewer; F6 takes control, F7 releases it.");
-   return ViewerMain.run(args.toArray(String[]::new));
+   return ViewerMain.run(viewerArguments(o,Integer.toString(tunnel.port()),pair,vanilla,generic));
   }
  }
 }

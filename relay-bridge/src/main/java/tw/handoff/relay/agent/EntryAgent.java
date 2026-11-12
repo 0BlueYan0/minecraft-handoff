@@ -13,14 +13,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class EntryAgent {
     private static final AtomicBoolean STARTED=new AtomicBoolean();
     private static volatile String state="PENDING";
+    private static volatile boolean startedGeneric;
     private static BridgeLoader bridgeLoader;
     public static void agentmain(String options,Instrumentation instrumentation){
-        Path channel,game;int port;
-        try{
-            String[] parts=options.split("\\.",-1);if(parts.length!=3)return;
-            channel=Path.of(decode(parts[0]));game=Path.of(decode(parts[1])).toRealPath();port=Integer.parseInt(parts[2]);
-            if(!channel.isAbsolute()||!Files.isRegularFile(channel,LinkOption.NOFOLLOW_LINKS)||!Files.isDirectory(game)||port<0||port>65535)return;
-        }catch(Exception invalid){return;}
+        Options parsed=parse(options);if(parsed==null)return;
+        Path channel=parsed.channel(),game=parsed.game();int port=parsed.port();boolean generic=parsed.generic();
         write(channel,"PENDING");
         try{
             Class<?> minecraft=null;
@@ -35,18 +32,38 @@ public final class EntryAgent {
             if(client==null)throw new IllegalStateException("Game not initialized");
             // Validate on every attach, including retries and an already-installed bridge.
             GameIdentity.require(client,game);
-            if(!STARTED.compareAndSet(false,true)){write(channel,state);return;}
+            String repeat=claim(generic);
+            if(repeat!=null){write(channel,repeat.isEmpty()?state:repeat);return;}
             bridgeLoader=new BridgeLoader(EntryAgent.class.getProtectionDomain().getCodeSource().getLocation(),minecraft.getClassLoader());
             Object target=client;
             ((Executor)client).execute(()->{
                 try{
                     Class<?> bridge=Class.forName("tw.handoff.relay.bridge.HostBridge",true,bridgeLoader);
-                    Object result=bridge.getMethod("start",Object.class,Path.class,int.class).invoke(null,target,game,port);
+                    Object result=bridge.getMethod("start",Object.class,Path.class,int.class,boolean.class).invoke(null,target,game,port,generic);
                     state="READY:"+result;write(channel,state);
                 }catch(Exception|LinkageError failure){state="FAILED:BRIDGE:"+rootType(failure);write(channel,state);}
             });
         }catch(Exception|LinkageError failure){write(channel,"FAILED:BOOTSTRAP:"+rootType(failure));}
     }
+    /** Agent options: status file, game directory and port (Base64/decimal), then an optional mode field: g = generic packet forwarding, - = off. Three fields mean off. Returns null for anything invalid. */
+    record Options(Path channel,Path game,int port,boolean generic){}
+    static Options parse(String options){
+        try{
+            String[] parts=options.split("\\.",-1);if(parts.length!=3&&parts.length!=4)return null;
+            Path channel=Path.of(decode(parts[0])),game=Path.of(decode(parts[1])).toRealPath();int port=Integer.parseInt(parts[2]);
+            boolean generic=false;if(parts.length==4){if(parts[3].equals("g"))generic=true;else if(!parts[3].equals("-"))return null;}
+            if(!channel.isAbsolute()||!Files.isRegularFile(channel,LinkOption.NOFOLLOW_LINKS)||!Files.isDirectory(game)||port<0||port>65535)return null;
+            return new Options(channel,game,port,generic);
+        }catch(Exception invalid){return null;}
+    }
+    /** First attach returns null. A repeat attach returns "" when it asks for the mode already running, or a FAILED status when it asks for a different one, so a second attach never silently keeps the first mode. */
+    static synchronized String claim(boolean generic){
+        if(STARTED.compareAndSet(false,true)){startedGeneric=generic;return null;}
+        if(startedGeneric==generic)return "";
+        System.err.println("[handoff-relay] Repeat attach asked for a different packet mode; the running mode is unchanged");
+        return "FAILED:MODE:Mismatch";
+    }
+    static synchronized void resetForTest(){STARTED.set(false);startedGeneric=false;state="PENDING";}
     private static String decode(String value){return new String(Base64.getUrlDecoder().decode(value),StandardCharsets.UTF_8);}
     private static String rootType(Throwable failure){while(failure.getCause()!=null&&failure.getCause()!=failure)failure=failure.getCause();return failure.getClass().getSimpleName();}
     private static void write(Path path,String value){try{Files.writeString(path,value,StandardOpenOption.WRITE,StandardOpenOption.TRUNCATE_EXISTING);}catch(Exception ignored){System.err.println("[handoff-relay] Status unavailable");}}

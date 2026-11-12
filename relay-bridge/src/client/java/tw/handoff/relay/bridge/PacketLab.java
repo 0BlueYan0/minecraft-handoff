@@ -16,9 +16,12 @@ final class PacketLab {
  private final HostBridge host;private final Channel channel;private final Mode mode;private final PacketJournal history;
  private static final Set<String> LOCAL=Set.of("keep_alive","pong","accept_teleportation","player_loaded","chunk_batch_received","client_tick_end","chat_ack","client_information","resource_pack","custom_click_action");
  static Mode mode(net.minecraft.client.Minecraft mc)throws Exception{return mode(mc.gameDirectory.toPath());}
+ static Mode mode(net.minecraft.client.Minecraft mc,boolean agentGeneric)throws Exception{return mode(mc.gameDirectory.toPath(),agentGeneric);}
  /** handoff.generic needs no fixture marker; handoff.packetLab still does; both together is refused. */
- static Mode mode(java.nio.file.Path gameDirectory)throws Exception{
-  boolean generic=Boolean.getBoolean("handoff.generic"),fixture=Boolean.getBoolean("handoff.packetLab");
+ static Mode mode(java.nio.file.Path gameDirectory)throws Exception{return mode(gameDirectory,false);}
+ /** agentGeneric is the mode the attaching agent asked for. It stands in for handoff.generic without touching the game JVM's system properties; handoff.packetLab still refuses it. */
+ static Mode mode(java.nio.file.Path gameDirectory,boolean agentGeneric)throws Exception{
+  boolean generic=agentGeneric||Boolean.getBoolean("handoff.generic"),fixture=Boolean.getBoolean("handoff.packetLab");
   if(generic&&fixture)throw new IllegalStateException("handoff.generic and handoff.packetLab are mutually exclusive");
   if(generic)return Mode.PRODUCTION;
   if(!fixture)return null;
