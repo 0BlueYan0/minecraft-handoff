@@ -24,6 +24,9 @@ public final class HostBridge {
     private final List<NativePeer> peers=new CopyOnWriteArrayList<>();
     private final RegistryAccess.Frozen registries;
     final FrameCodec codec;
+    final tw.handoff.relay.core.SaoReplayTable table;
+    private final int payloadId;
+    private static final java.util.Set<String> TABLE_CHANNELS=java.util.Set.of("saocore:mux","capuodev:quest_hud","saoblessing:main");
     private final Channel upstream;
     private NativeFrontend frontend;
     private RemoteControl control;
@@ -31,18 +34,31 @@ public final class HostBridge {
     private HostBridge(Minecraft mc)throws Exception{
         minecraft=mc;if(mc.player==null||mc.level==null||mc.getConnection()==null)throw new IllegalStateException("Join the original server first");
         registries=mc.getConnection().registryAccess();codec=new FrameCodec(registries);
+        payloadId=customPayloadId();table=new tw.handoff.relay.core.SaoReplayTable(payloadId,4*1024*1024);
         Channel found=null;
         for(Field f:Connection.class.getDeclaredFields())if(Channel.class.isAssignableFrom(f.getType())){f.setAccessible(true);found=(Channel)f.get(mc.getConnection().getConnection());break;}
         if(found==null)throw new IllegalStateException("Original transport unavailable");upstream=found;
     }
+    /** Same way PacketLab.install finds the play custom payload packet id. */
+    private int customPayloadId(){
+        byte[] brand=codec.freeze(new net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket(new net.minecraft.network.protocol.common.custom.BrandPayload("join-wire-id"))).getFirst();
+        return tw.handoff.relay.core.OpaqueFrames.readVarInt(brand,new int[]{0});
+    }
     public static String start(Object client,Path directory,int port)throws Exception{
         Minecraft mc=(Minecraft)client;
         if(!mc.gameDirectory.toPath().toRealPath().equals(directory.toRealPath()))throw new IllegalStateException("Wrong game instance");
-        HostBridge host=new HostBridge(mc);if(PacketLab.enabled(mc))host.lab=new PacketLab(host,host.upstream);host.frontend=new NativeFrontend(host,port);host.control=new RemoteControl(host);
+        HostBridge host=new HostBridge(mc);PacketLab.Mode labMode=PacketLab.mode(mc);if(labMode!=null)host.lab=new PacketLab(host,host.upstream,labMode);host.frontend=new NativeFrontend(host,port);host.control=new RemoteControl(host);
         if(host.lab!=null)host.lab.install();
         host.upstream.eventLoop().submit(()->host.upstream.pipeline().addBefore("packet_handler","handoff_relay_capture",new ChannelDuplexHandler(){
             public void channelRead(ChannelHandlerContext context,Object message)throws Exception{
                 List<byte[]> frames=null;
+                // The frame enters the table before the game thread handles it, whether or not a viewer is connected.
+                if(message instanceof net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket custom&&TABLE_CHANNELS.contains(custom.payload().type().id().toString())){
+                    // A frame the host cannot record leaves the replay short, so the table reports it as replay-skipped.
+                    // When freeze fails there are no bytes to read the mux sub-channel from, so it is marked even if the table would have ignored that sub-channel. This is deliberately conservative.
+                    if(custom.payload() instanceof net.minecraft.network.protocol.common.custom.DiscardedPayload)host.table.markSkipped();
+                    else try{for(byte[] frame:host.codec.freeze(custom))host.table.observe(frame);}catch(RuntimeException|LinkageError unsupported){host.table.markSkipped();LOG.debug("Replay table could not record a payload");}
+                }
                 if(host.lab==null&&message instanceof Packet<?> packet&&host.peers.stream().anyMatch(peer->peer.live)&&MirrorRules.forward(packet)){
                     try{frames=host.codec.freeze(packet);}catch(RuntimeException|LinkageError unsupported){LOG.debug("Relay omitted unsupported packet type {}",packet.type().id());}
                 }
@@ -80,13 +96,16 @@ public final class HostBridge {
             upstream.config().setAutoRead(false);
             ReadPause pause=new ReadPause(()->upstream.eventLoop().execute(()->{if(upstream.isActive())upstream.config().setAutoRead(true);}));
             var timeout=upstream.eventLoop().schedule(()->{if(pause.active()){peer.close("Host snapshot is busy; reconnect");pause.close();}},2,java.util.concurrent.TimeUnit.SECONDS);
-            minecraft.execute(()->{
-                try{
-                    if(!pause.active())return;
-                    if(!peer.closed){SnapshotPackets.send(this,peer);if(lab!=null)lab.replay(peer);peer.lifecycle.snapshotSent();peer.live=true;ready(peer);}
-                }catch(Exception|LinkageError failure){peer.close("Snapshot unavailable: "+failure.getClass().getSimpleName());LOG.warn("Relay snapshot failed ({})",failure.getClass().getSimpleName());}
-                finally{timeout.cancel(false);pause.close();}
-            });
+            var join=new JoinState(peer.gate,table,payloadId,new JoinState.Ports(
+                ()->{SnapshotPackets.send(this,peer);if(lab!=null&&lab.hasJournal())lab.replay(peer);}, // PRODUCTION keeps no journal, so full history is never replayed.
+                ()->net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.getSendable().stream().map(Object::toString).toList(),
+                frame->peer.sendFrames(List.of(frame)),
+                text->peer.send(RemoteControl.message(text)),
+                now->tw.handoff.sao.SaoSnapshot.capture(minecraft.getClass().getClassLoader(),now),
+                System::nanoTime,
+                ()->{peer.lifecycle.snapshotSent();peer.live=true;ready(peer);}));
+            peer.join=join;
+            join.start(minecraft::execute,()->pause.active()&&!peer.closed,failure->{peer.close("Snapshot unavailable: "+failure.getClass().getSimpleName());LOG.warn("Relay snapshot failed ({})",failure.getClass().getSimpleName());},()->{timeout.cancel(false);pause.close();});
         });
     }
 }

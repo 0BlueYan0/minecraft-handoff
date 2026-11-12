@@ -32,6 +32,8 @@ final class NativePeer implements InvocationHandler {
     final String id=UUID.randomUUID().toString();
     final HostBridge host;final Connection connection;final Channel channel;
     final PeerLifecycle lifecycle=new PeerLifecycle();
+    final tw.handoff.relay.core.JoinGate gate=new tw.handoff.relay.core.JoinGate();
+    volatile JoinState join;
     final tw.handoff.relay.core.InputInbox inputs=new tw.handoff.relay.core.InputInbox(64);
     final PendingBudget budget=new PendingBudget(2048,32L*1024*1024);
     final Object listener;

@@ -18,7 +18,12 @@ final class RemoteControl {
  private long lastInput;private int ticks;
  private volatile boolean remote;
  RemoteControl(HostBridge host)throws Exception{this.host=host;mc=host.minecraft();driver=new RemoteDriver(mc,this::release);}
- void ready(NativePeer peer){peer.send(message(ControlWire.PREFIX+"R:0"));grant(peer);}
+ /** Q 先於 R:0 送出。viewer 收到 R: 才送 ACK，pong 因此一定排在 ACK 前面，閘門不會先看到 ACK 才看到往返時間。 */
+ void ready(NativePeer peer){
+  Runnable sendReady=()->peer.send(message(ControlWire.PREFIX+"R:0"));
+  JoinState join=peer.join;
+  if(join!=null)join.ready(sendReady);else sendReady.run();
+ }
  private void grant(NativePeer peer){
   if(!peer.lifecycle.active()||peer.closed||mc.player==null)return;
   if(mc.player.containerMenu!=mc.player.inventoryMenu||!mc.player.containerMenu.getCarried().isEmpty()){peer.send(message(ControlWire.PREFIX+"E:Close the host container before taking control"));return;}
@@ -36,7 +41,9 @@ final class RemoteControl {
  }
  private void dispatch(NativePeer peer,String text){try{
    if(peer.closed||!peer.lifecycle.active())return;
-   if(text.equals(ControlWire.PREFIX+"TAKE")){grant(peer);return;}
+   JoinState join=peer.join;
+   if(join!=null&&join.handle(text,()->grant(peer)))return;
+   if(text.equals(ControlWire.PREFIX+"TAKE"))return; // No join flow ran for this viewer, so there is no state to hand over.
    if(text.equals(ControlWire.PREFIX+"RELEASE")){if(lease.ownedBy(peer))release();return;}
    if(text.startsWith(ControlWire.PREFIX+"I:")){ControlFrame f=ControlFrame.decode(text);if(lease.accept(peer,f.epoch(),f.sequence())){lastInput=System.nanoTime();driver.frame(f);}return;}
    if(host.lab!=null&&text.startsWith(ControlWire.PREFIX+"G:")){var a=ControlWire.parseAction(text.replaceFirst("HANDOFF2:G:","HANDOFF2:A:"));if(lease.accept(peer,a.epoch(),a.sequence())){lastInput=System.nanoTime();host.lab.forward(a.data());}return;}
