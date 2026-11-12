@@ -14,6 +14,7 @@ import net.minecraft.network.protocol.game.*;
 import tw.handoff.relay.core.*;
 
 final class RemoteControl {
+ private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger("minecraft-handoff-relay");
  private final HostBridge host;private final Minecraft mc;private final ControlLease<NativePeer> lease=new ControlLease<>();private final RemoteDriver driver;
  private long lastInput;private int ticks;
  private volatile boolean remote;
@@ -31,8 +32,10 @@ final class RemoteControl {
  private void grant(NativePeer peer){
   if(!peer.lifecycle.active()||peer.closed||mc.player==null)return;
   if(mc.player.containerMenu!=mc.player.inventoryMenu||!mc.player.containerMenu.getCarried().isEmpty()){peer.send(message(ControlWire.PREFIX+"E:Close the host container before taking control"));return;}
-  if(mc.screen!=null&&!(mc.screen instanceof PauseScreen)&&!(mc.screen instanceof ChatScreen)&&!(mc.screen instanceof InventoryScreen)){peer.send(message(ControlWire.PREFIX+"E:Close the host screen before taking control"));return;}
-  if(mc.screen!=null)mc.setScreen(null);
+  LOG.debug("Viewer asks for control, host screen: {}",mc.screen==null?"none":mc.screen.getClass().getName());
+  boolean saoPause=mc.screen!=null&&PauseScreens.saoPause(mc.screen.getClass().getName());
+  if(mc.screen!=null&&!saoPause&&!(mc.screen instanceof PauseScreen)&&!(mc.screen instanceof ChatScreen)&&!(mc.screen instanceof InventoryScreen)){peer.send(message(ControlWire.PREFIX+"E:Close the host screen before taking control"));return;}
+  if(mc.screen!=null&&PauseScreens.closeOnGrant(saoPause,host.lab!=null))mc.setScreen(null);
   // driver.begin records mc.player.input as the original, so an idle walk has to be over before it runs.
   if(walk!=null)walk.abort("viewer took control");
   release();lease.grant(peer,true);if(host.lab==null)driver.begin();remote=true;lastInput=System.nanoTime();announce();

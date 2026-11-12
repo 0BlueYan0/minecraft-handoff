@@ -17,6 +17,8 @@ public final class ClientProbe {
   if(operation.equals("labStatus")){Files.writeString(status,labStatus(mc));return;}
   // The marker check above is what limits these screen commands to private fixtures.
   if(operation.equals("chatScreen")){mc.setScreen(new net.minecraft.client.gui.screens.ChatScreen(""));Files.writeString(status,"SCREEN="+screenName(mc));return;}
+  if(operation.equals("saoScreen")){mc.setScreen((net.minecraft.client.gui.screens.Screen)Class.forName("fr.sao.news.NewsScreen").getConstructor().newInstance());Files.writeString(status,"SCREEN="+mc.screen.getClass().getName());return;} // 非暫停的 SAO 畫面，驗證 grant 仍擋它
+  if(operation.equals("unfocus")){mc.setWindowActive(false);Files.writeString(status,"SCREEN="+screenName(mc));return;} // 讓遊戲以為視窗失焦，不送作業系統事件；pauseOnLostFocus 為 true 時遊戲自己開暫停選單
   if(operation.equals("closeScreen")){mc.setScreen(null);Files.writeString(status,"SCREEN="+screenName(mc));return;}
   if(operation.equals("screen")){Files.writeString(status,"SCREEN="+screenName(mc));return;}
   if(operation.equals("nativeAttack")){mc.setScreen(null);mc.gameRenderer.pick(1);for(String name:new String[]{"startAttack","method_1536"})try{var method=mc.getClass().getDeclaredMethod(name);method.setAccessible(true);method.invoke(mc);Files.writeString(status,"NATIVE_ATTACK_SWINGING="+mc.player.swinging);return;}catch(NoSuchMethodException absent){}throw new IllegalStateException("Attack mapping unavailable");}

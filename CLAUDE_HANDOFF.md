@@ -17,7 +17,7 @@
   | 常駐端沒人操作時每 5 分鐘自動前右後左各走 2 秒（`IdleWalkPlan`、`IdleWalker`），`--idle-walk`，Mac `HANDOFF_IDLE_WALK=0` 關掉 | `996eb5e` | `README-walk.md`，規劃 `docs/superpowers/plans/2026-11-12-host-idle-walk.md` |
 
 - 還沒驗的：Mac 實機、SAO 實服接管、VPS 中繼（設計時排除）。實服要看的項目列在 `.herdr-work/handoff.md`。
-- 已知限制：SAOUI 用自己的 `fr.sao.triggersmod.screen.pausemenu.GameMenuScreen`（繼承 `Screen`，不是 `PauseScreen`）取代原版暫停選單，`RemoteControl.grant` 不認得它，Mac 視窗失焦開著暫停選單時 viewer 拿不到控制權。目前靠使用者在 Mac 按 F3+P 關掉失焦暫停。
+- 已知限制：SAOUI 用自己的暫停選單 `fr.sao.triggersmod.screen.pausemenu.GameMenuScreen`（活動中是 `fr.sao.backrooms.BackroomsPauseScreen`），不是原版 `PauseScreen`。2026-11-12 起 `RemoteControl.grant` 用完整類別名（`PauseScreens`）放行這兩個，generic 模式不關畫面，thin 模式照舊關掉。只在本機 fixture 驗過（`README-pause.md`），Mac 實機與 SAO 實服沒驗。SAOUI 改類別名時會退回「Close the host screen」，要重新比對。
 - 每一輪的 worker、reviewer session id 與結果在 `.herdr-work/ledger.md`。
 
 ## 先讀這一段（2026-11-11 原交接）
