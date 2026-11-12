@@ -21,6 +21,28 @@ class ServiceMainArgsTest {
         assertEquals("--generic",on.getLast());assertFalse(off.contains("--generic"));
         assertEquals(off,on.subList(0,on.size()-1));assertTrue(off.containsAll(List.of("--pid","42","--game-dir")));
     }
+    @Test void idleWalkIsAFlagWithoutValueAndOffByDefault(){
+        assertFalse(ServiceMain.parse(new String[]{"host","--pid","7"}).idleWalk());
+        var both=ServiceMain.parse(new String[]{"host","--pid","7","--idle-walk","--generic","--state","s"});
+        assertTrue(both.idleWalk());assertTrue(both.generic());assertEquals(Map.of("--pid","7","--state","s"),both.options());
+        var swapped=ServiceMain.parse(new String[]{"host","--generic","--pid","7","--idle-walk"});
+        assertTrue(swapped.idleWalk());assertTrue(swapped.generic());assertEquals(Map.of("--pid","7"),swapped.options());
+        var only=ServiceMain.parse(new String[]{"host","--pid","7","--idle-walk"});assertTrue(only.idleWalk());assertFalse(only.generic());
+        var genericOnly=ServiceMain.parse(new String[]{"host","--pid","7","--generic"});assertFalse(genericOnly.idleWalk());
+    }
+    @Test void hostAttachCommandForwardsIdleWalk(){
+        var game=Path.of("game");var relay=Path.of("relay.jar");
+        var both=ServiceMain.attachCommand("java",relay,42,game,true,true);
+        var only=ServiceMain.attachCommand("java",relay,42,game,false,true);
+        var neither=ServiceMain.attachCommand("java",relay,42,game,false,false);
+        assertEquals(List.of("--generic","--idle-walk"),both.subList(both.size()-2,both.size()));
+        assertEquals("--idle-walk",only.getLast());assertFalse(only.contains("--generic"));
+        assertEquals(neither,only.subList(0,only.size()-1));
+        assertEquals(ServiceMain.attachCommand("java",relay,42,game,true),ServiceMain.attachCommand("java",relay,42,game,true,false));
+    }
+    @Test void viewerRefusesIdleWalk(){
+        assertThrows(IllegalArgumentException.class,()->ServiceMain.run(new String[]{"viewer","--pair","p","--idle-walk"}));
+    }
     @Test void viewerArgumentsCarryTheFlagToViewerMain(){
         var o=Map.of("--install","i","--viewer-dir","v","--guard","g");
         assertTrue(List.of(ServiceMain.viewerArguments(o,"9",PAIR,false,true)).contains("--generic"));

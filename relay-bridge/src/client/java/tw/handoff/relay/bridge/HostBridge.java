@@ -44,10 +44,12 @@ public final class HostBridge {
         byte[] brand=codec.freeze(new net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket(new net.minecraft.network.protocol.common.custom.BrandPayload("join-wire-id"))).getFirst();
         return tw.handoff.relay.core.OpaqueFrames.readVarInt(brand,new int[]{0});
     }
-    public static String start(Object client,Path directory,int port,boolean generic)throws Exception{
+    public static String start(Object client,Path directory,int port,boolean generic)throws Exception{return start(client,directory,port,generic,false);}
+    /** idleWalk turns on the timed walk that keeps an unattended host from idling; it is a parameter, not a JVM property, because the game JVM belongs to the user. */
+    public static String start(Object client,Path directory,int port,boolean generic,boolean idleWalk)throws Exception{
         Minecraft mc=(Minecraft)client;
         if(!mc.gameDirectory.toPath().toRealPath().equals(directory.toRealPath()))throw new IllegalStateException("Wrong game instance");
-        HostBridge host=new HostBridge(mc);PacketLab.Mode labMode=PacketLab.mode(mc,generic);LOG.info("Packet forwarding mode: {}",labMode==null?"OFF":labMode);if(labMode!=null)host.lab=new PacketLab(host,host.upstream,labMode);host.frontend=new NativeFrontend(host,port);host.control=new RemoteControl(host);
+        HostBridge host=new HostBridge(mc);PacketLab.Mode labMode=PacketLab.mode(mc,generic);LOG.info("Packet forwarding mode: {}",labMode==null?"OFF":labMode);LOG.info("Idle walk: {}",idleWalk?"ON":"OFF");if(labMode!=null)host.lab=new PacketLab(host,host.upstream,labMode);host.frontend=new NativeFrontend(host,port);host.control=new RemoteControl(host,idleWalk);
         if(host.lab!=null)host.lab.install();
         host.upstream.eventLoop().submit(()->host.upstream.pipeline().addBefore("packet_handler","handoff_relay_capture",new ChannelDuplexHandler(){
             public void channelRead(ChannelHandlerContext context,Object message)throws Exception{

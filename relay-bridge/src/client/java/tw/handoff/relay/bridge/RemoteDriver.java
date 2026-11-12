@@ -20,11 +20,15 @@ final class RemoteDriver {
   Field g=null;for(String alias:new String[]{"mouseGrabbed","field_1783"})try{g=mc.mouseHandler.getClass().getDeclaredField(alias);break;}catch(NoSuchFieldException ignored){}
   if(g==null)throw new IllegalStateException("Mouse state contract unavailable");grabbed=g;grabbed.setAccessible(true);
   long window=mc.getWindow().getWindow();
-  keyboard=GLFW.glfwSetKeyCallback(window,(w,k,s,a,m)->{if(active){if(k==GLFW.GLFW_KEY_F8&&a==GLFW.GLFW_PRESS)mc.execute(emergency);}else if(keyboard!=null)keyboard.invoke(w,k,s,a,m);});
-  buttons=GLFW.glfwSetMouseButtonCallback(window,(w,b,a,m)->{if(!active&&buttons!=null)buttons.invoke(w,b,a,m);});
-  cursor=GLFW.glfwSetCursorPosCallback(window,(w,x,y)->{if(!active&&cursor!=null)cursor.invoke(w,x,y);});
-  scroll=GLFW.glfwSetScrollCallback(window,(w,x,y)->{if(!active&&scroll!=null)scroll.invoke(w,x,y);});
+  keyboard=GLFW.glfwSetKeyCallback(window,(w,k,s,a,m)->{if(active){if(k==GLFW.GLFW_KEY_F8&&a==GLFW.GLFW_PRESS)mc.execute(emergency);}else{human();if(keyboard!=null)keyboard.invoke(w,k,s,a,m);}});
+  buttons=GLFW.glfwSetMouseButtonCallback(window,(w,b,a,m)->{if(!active){human();if(buttons!=null)buttons.invoke(w,b,a,m);}});
+  cursor=GLFW.glfwSetCursorPosCallback(window,(w,x,y)->{if(!active){human();if(cursor!=null)cursor.invoke(w,x,y);}});
+  scroll=GLFW.glfwSetScrollCallback(window,(w,x,y)->{if(!active){human();if(scroll!=null)scroll.invoke(w,x,y);}});
  }
+ /** Receives the time of each event the host window gets while no viewer drives it (GLFW thread). Generic mode never sets active, so every event counts there. */
+ private volatile Runnable humanInput;
+ void onHumanInput(Runnable listener){humanInput=listener;}
+ private void human(){Runnable listener=humanInput;if(listener!=null)listener.run();}
  void begin(){if(active)return;original=mc.player.input;oldPause=mc.options.pauseOnLostFocus;oldGrabbed=mc.mouseHandler.isMouseGrabbed();active=true;mc.options.pauseOnLostFocus=false;KeyMapping.releaseAll();}
  void frame(ControlFrame value){frame=value;}
  void tick(){if(!active||mc.player==null)return;

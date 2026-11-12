@@ -15,6 +15,10 @@ public final class ClientProbe {
   if(output!=null)throw new IllegalStateException("Probe already running");
   if(operation.equals("saoRoundtrip")){Files.writeString(status,SaoFixtureRoundtrip.run(mc));return;}
   if(operation.equals("labStatus")){Files.writeString(status,labStatus(mc));return;}
+  // The marker check above is what limits these screen commands to private fixtures.
+  if(operation.equals("chatScreen")){mc.setScreen(new net.minecraft.client.gui.screens.ChatScreen(""));Files.writeString(status,"SCREEN="+screenName(mc));return;}
+  if(operation.equals("closeScreen")){mc.setScreen(null);Files.writeString(status,"SCREEN="+screenName(mc));return;}
+  if(operation.equals("screen")){Files.writeString(status,"SCREEN="+screenName(mc));return;}
   if(operation.equals("nativeAttack")){mc.setScreen(null);mc.gameRenderer.pick(1);for(String name:new String[]{"startAttack","method_1536"})try{var method=mc.getClass().getDeclaredMethod(name);method.setAccessible(true);method.invoke(mc);Files.writeString(status,"NATIVE_ATTACK_SWINGING="+mc.player.swinging);return;}catch(NoSuchMethodException absent){}throw new IllegalStateException("Attack mapping unavailable");}
   command=operation;output=status;remaining=operation.equals("walk")?20:operation.equals("dig")?8:5;
   if(!installed){installed=true;ClientTickEvents.START_CLIENT_TICK.register(ClientProbe::tick);}
@@ -25,6 +29,7 @@ public final class ClientProbe {
   else if(operation.equals("respawn"))mc.player.respawn();
   else if(operation.equals("labEcho")||operation.equals("localChange"))Class.forName("tw.handoff.lab.LabClient",false,mc.getClass().getClassLoader()).getMethod(operation.equals("labEcho")?"probe":"localChange").invoke(null);
  }
+ private static String screenName(Minecraft mc){return mc.screen==null?"none":mc.screen.getClass().getSimpleName();}
  private static Object read(ClassLoader loader,String type,String name)throws Exception{var field=Class.forName(type,false,loader).getDeclaredField(name);field.setAccessible(true);return field.get(null);}
  /** The fixture's own status line plus SAOUI values read through reflection, the viewer title and what the connection can send. Read only. */
  @SuppressWarnings("unchecked") private static String labStatus(Minecraft mc)throws Exception{

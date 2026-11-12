@@ -17,7 +17,11 @@ final class RemoteControl {
  private final HostBridge host;private final Minecraft mc;private final ControlLease<NativePeer> lease=new ControlLease<>();private final RemoteDriver driver;
  private long lastInput;private int ticks;
  private volatile boolean remote;
- RemoteControl(HostBridge host)throws Exception{this.host=host;mc=host.minecraft();driver=new RemoteDriver(mc,this::release);}
+ private final IdleWalker walk;
+ RemoteControl(HostBridge host,boolean idleWalk)throws Exception{
+  this.host=host;mc=host.minecraft();driver=new RemoteDriver(mc,this::release);
+  if(idleWalk){walk=new IdleWalker(mc,new IdleWalkPlan(System::nanoTime),this::remoteOwns);driver.onHumanInput(walk::humanInput);}else walk=null;
+ }
  /** Q 先於 R:0 送出。viewer 收到 R: 才送 ACK，pong 因此一定排在 ACK 前面，閘門不會先看到 ACK 才看到往返時間。 */
  void ready(NativePeer peer){
   Runnable sendReady=()->peer.send(message(ControlWire.PREFIX+"R:0"));
@@ -29,9 +33,11 @@ final class RemoteControl {
   if(mc.player.containerMenu!=mc.player.inventoryMenu||!mc.player.containerMenu.getCarried().isEmpty()){peer.send(message(ControlWire.PREFIX+"E:Close the host container before taking control"));return;}
   if(mc.screen!=null&&!(mc.screen instanceof PauseScreen)&&!(mc.screen instanceof ChatScreen)&&!(mc.screen instanceof InventoryScreen)){peer.send(message(ControlWire.PREFIX+"E:Close the host screen before taking control"));return;}
   if(mc.screen!=null)mc.setScreen(null);
+  // driver.begin records mc.player.input as the original, so an idle walk has to be over before it runs.
+  if(walk!=null)walk.abort("viewer took control");
   release();lease.grant(peer,true);if(host.lab==null)driver.begin();remote=true;lastInput=System.nanoTime();announce();
  }
- void release(){NativePeer p=lease.owner();if(p!=null)lease.release(p);driver.end();remote=false;if(p!=null)announce();}
+ void release(){if(walk!=null)walk.abort("control released");NativePeer p=lease.owner();if(p!=null)lease.release(p);driver.end();remote=false;if(p!=null)announce();}
  private void announce(){for(NativePeer p:host.peers())if(p.lifecycle.active())p.send(message(ControlWire.PREFIX+"R:"+(lease.ownedBy(p)?lease.epoch():0)));}
  boolean remoteOwns(){return remote;}
  static ClientboundCustomPayloadPacket message(String value){return new ClientboundCustomPayloadPacket(new BrandPayload(value));}
@@ -70,10 +76,11 @@ final class RemoteControl {
  }
  void tick(){
   for(NativePeer peer:host.peers())for(String text:peer.inputs.drain())dispatch(peer,text);
-  if(mc.player==null||mc.level==null||mc.getConnection()==null){release();return;}
+  if(mc.player==null||mc.level==null||mc.getConnection()==null){if(walk!=null)walk.tick();release();return;}
   NativePeer owner=lease.owner();if(owner!=null&&(owner.closed||!owner.lifecycle.active()||System.nanoTime()-lastInput>2_000_000_000L))release();
   else if(owner!=null&&System.nanoTime()-lastInput>300_000_000L)driver.clear();
   driver.tick();
+  if(walk!=null)walk.tick();
  }
  void pose(){if(mc.player==null||host.lab!=null)return;var p=mc.player;
   String value=ControlWire.PREFIX+"P:"+p.getX()+":"+p.getY()+":"+p.getZ()+":"+p.getYRot()+":"+p.getXRot()+":"+(p.onGround()?1:0)+":"+p.getInventory().selected;

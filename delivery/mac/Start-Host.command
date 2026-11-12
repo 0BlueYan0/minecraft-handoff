@@ -25,7 +25,10 @@ if [ -z "$PAIR_HOST" ]; then read -r -p "Mac LAN/VPN address reachable from Wind
 # Packet forwarding is on by default; run with HANDOFF_GENERIC=0 to turn it off.
 GENERIC="--generic"
 if [ "${HANDOFF_GENERIC:-1}" = "0" ]; then GENERIC=""; fi
+# The timed idle walk is on by default; run with HANDOFF_IDLE_WALK=0 to turn it off.
+IDLE_WALK="--idle-walk"
+if [ "${HANDOFF_IDLE_WALK:-1}" = "0" ]; then IDLE_WALK=""; fi
 echo "Host requires an awake Mac and the original game engine. Ctrl+C ends remote access only."
 caffeinate -i "$JAVA" --add-modules jdk.attach -jar "$HERE/lib/handoff-service-0.2.0.jar" host \
   --pid "$GAME_PID" --game-dir "$GAME" --relay-jar "$HERE/lib/relay-bridge-0.2.0.jar" \
-  --state "$STATE" --pair-host "$PAIR_HOST" --port "${HANDOFF_PORT:-25575}" $GENERIC
+  --state "$STATE" --pair-host "$PAIR_HOST" --port "${HANDOFF_PORT:-25575}" $GENERIC $IDLE_WALK
