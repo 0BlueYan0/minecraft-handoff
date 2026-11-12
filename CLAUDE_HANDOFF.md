@@ -2,11 +2,29 @@
 
 交接日期：2026-11-11（Asia/Taipei）。使用者明確要求把專案放到 `C:\myspace`，由 Claude 接手。
 
-## 先讀這一段
+## 目前狀態（2026-11-12 更新）
+
+這一段比下面各段新，下面寫的「未提交」「待伺服器恢復」「正常預設路徑仍是 thin」都已過時。
+
+- 分支 `feature/p0-diagnostics`，`b8c4fb5`..`996eb5e` 全部已 commit，**沒有 push**（使用者選「測完再 push」）。
+- 實服可以連，使用者經常在玩。碰實服前照 `CLAUDE.md` 先用選單問。
+- 已做完、只在本機 fixture（真 SAOUI、私有後端）驗過的：
+
+  | 項目 | commit | 證據 |
+  |---|---|---|
+  | viewer 中途加入：常駐端重播 SAO 推送狀態（`SaoReplayTable`）與 `sao-state` 欄位快照，viewer 在 JOIN 後套用、回 ACK，`JoinGate` 通過才交出控制權 | `a4a5fa7`..`3b42254` | `handoff-evidence/join-state/README.md`，規劃 `docs/superpowers/plans/2026-11-12-viewer-join-state.md` |
+  | 通用轉送（`PacketLab.Mode.PRODUCTION`）由啟動腳本的 `--generic` 打開，Mac `HANDOFF_GENERIC=0`、Windows `-NoGeneric` 關掉 | `c8f704b` | `README-t8.md` |
+  | 常駐端沒人操作時每 5 分鐘自動前右後左各走 2 秒（`IdleWalkPlan`、`IdleWalker`），`--idle-walk`，Mac `HANDOFF_IDLE_WALK=0` 關掉 | `996eb5e` | `README-walk.md`，規劃 `docs/superpowers/plans/2026-11-12-host-idle-walk.md` |
+
+- 還沒驗的：Mac 實機、SAO 實服接管、VPS 中繼（設計時排除）。實服要看的項目列在 `.herdr-work/handoff.md`。
+- 已知限制：SAOUI 用自己的 `fr.sao.triggersmod.screen.pausemenu.GameMenuScreen`（繼承 `Screen`，不是 `PauseScreen`）取代原版暫停選單，`RemoteControl.grant` 不認得它，Mac 視窗失焦開著暫停選單時 viewer 拿不到控制權。目前靠使用者在 Mac 按 F3+P 關掉失焦暫停。
+- 每一輪的 worker、reviewer session id 與結果在 `.herdr-work/ledger.md`。
+
+## 先讀這一段（2026-11-11 原交接）
 
 - **新的工作位置：`C:\myspace\minecraft-handoff`。** 舊副本保留在 `C:\Users\user\Documents\Codex\2026-11-11\new-chat\outputs\minecraft-handoff`，後續請以新位置繼續，避免兩份分叉。
-- 分支 `feature/p0-diagnostics`；最後提交 `aad42f7`（generic packet feasibility lab）。**最新 SAO snapshot、測試工具和本交接檔仍未提交**，已隨 working tree 複製。請先看 `git status` / `git diff`，保留這些修改。
-- 使用者最後告知：「現在伺服器也進不去暫時測不了」。正式 SAO 測試待伺服器恢復，**不是使用者拒絕繼續**。目前不能宣稱 SAO 或 Mac 已完成。
+- 分支 `feature/p0-diagnostics`；當時最後提交 `aad42f7`（generic packet feasibility lab）。當時 SAO snapshot 還沒提交，現在已提交（見上一段）。
+- 使用者當時告知：「現在伺服器也進不去暫時測不了」。之後實服已能連線，見上一段。
 - 使用者已多次要求持續解決問題，不要反覆請求例行批准。範圍已包含實作、自製模組／代理及獨立測試；需要使用者時，提出具體且最少的操作步驟。
 - 截止交接，僅關閉了我們的私有測試遊戲 PID72524、私有測試伺服器。**沒有關閉使用者原本的遊戲**。最後曾觀察到原遊戲 PID61084，但這是歷史資料，之後一律重新確認，不能照 PID 盲目操作。
 
@@ -83,7 +101,7 @@ P0 `runtime-agent0.1.2` 曾在真實 SAO 遊戲 PID68948附加，原 PID與已�
 | handoff-service | 配對及憑證pinning TLS sidecar，停止sidecar不殺原遊戲 |
 | packet-lab | 獨立測試mod，正式runtime不能帶入 |
 | integration-probe | 只對marked私有fixture執行應用API的測試agent，不能交付為正式操作工具 |
-| sao-state | **最新未提交**：SAO目前資料快照／本機還原API，以及獨立read-only Attach probe |
+| sao-state | SAO目前資料快照／本機還原API（含武器冷卻與護盾鎖定時間），以及獨立read-only Attach probe |
 
 ## 最新工作：SAO state snapshot
 
