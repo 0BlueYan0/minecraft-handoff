@@ -1,5 +1,6 @@
 plugins { id 'fabric-loom' }
 evaluationDependsOn(':relay-core')
+evaluationDependsOn(':sao-state')
 version='0.2.0'
 group='tw.handoff'
 repositories { mavenCentral() }
@@ -18,7 +19,21 @@ dependencies {
     modImplementation 'net.fabricmc:fabric-loader:0.20.1'
     modImplementation 'net.fabricmc.fabric-api:fabric-api:0.119.4+1.21.4'
     implementation project(':relay-core')
+    implementation project(':sao-state')
+    implementation 'com.google.code.gson:gson:2.11.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
 }
 tasks.withType(JavaCompile).configureEach { options.release=21; options.encoding='UTF-8' }
 java { sourceCompatibility=JavaVersion.VERSION_21; targetCompatibility=JavaVersion.VERSION_21 }
-jar { dependsOn project(':relay-core').tasks.named('classes'); from project(':relay-core').sourceSets.main.output }
+jar {
+    dependsOn project(':relay-core').tasks.named('classes'), project(':sao-state').tasks.named('classes')
+    from project(':relay-core').sourceSets.main.output
+    from(project(':sao-state').sourceSets.main.output) { exclude 'tw/handoff/sao/probe/**' }
+}
+sourceSets.test.compileClasspath += sourceSets.client.output
+sourceSets.test.runtimeClasspath += sourceSets.client.output
+test {
+    useJUnitPlatform()
+    testLogging { events 'passed','failed','skipped' }
+}

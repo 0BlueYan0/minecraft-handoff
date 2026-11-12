@@ -22,7 +22,7 @@ import org.lwjgl.glfw.GLFW;
 public final class ViewerClient implements ClientModInitializer {
     private static final EndpointPolicy ENDPOINT=new EndpointPolicy(Integer.parseInt(System.getProperty("handoff.viewerPort","0")));
     public static final boolean THIN=Boolean.parseBoolean(System.getProperty("handoff.viewerMode","true"));
-    public static final boolean LAB=Boolean.getBoolean("handoff.packetLab")&&!Boolean.getBoolean("handoff.labHost");
+    public static final boolean LAB=(Boolean.getBoolean("handoff.packetLab")||Boolean.getBoolean("handoff.generic"))&&!Boolean.getBoolean("handoff.labHost");
     private static long epoch,sequence;private static boolean takeDown,releaseDown;
     private static java.nio.channels.FileChannel gameLockFile;private static java.nio.channels.FileLock gameLock;
     public static String title(){return !THIN&&!LAB?"Minecraft Handoff - HOST FIXTURE":epoch>0?"Minecraft Handoff - CONTROLLER (F7 release)":"Minecraft Handoff - SPECTATOR (F6 take control)";}
@@ -31,11 +31,12 @@ public final class ViewerClient implements ClientModInitializer {
     public void onInitializeClient(){
         try{gameLockFile=java.nio.channels.FileChannel.open(Minecraft.getInstance().gameDirectory.toPath().resolve(".game-lock"),java.nio.file.StandardOpenOption.CREATE,java.nio.file.StandardOpenOption.WRITE);gameLock=gameLockFile.tryLock();if(gameLock==null)throw new IllegalStateException("Viewer already running");}catch(java.io.IOException error){throw new IllegalStateException("Viewer profile lock unavailable",error);}
         LoggerFactory.getLogger("handoff-viewer").info("Viewer destination guard enabled");
-        ClientPlayConnectionEvents.JOIN.register((handler,sender,client)->{epoch=sequence=0;client.getWindow().setTitle(THIN?"Minecraft Handoff - VIEWER (loading)":"Minecraft Handoff - HOST FIXTURE");});
-        ClientPlayConnectionEvents.DISCONNECT.register((handler,client)->{epoch=sequence=0;});
+        ClientPlayConnectionEvents.JOIN.register((handler,sender,client)->{epoch=sequence=0;JOIN_STATE.onJoin();client.getWindow().setTitle(THIN?"Minecraft Handoff - VIEWER (loading)":"Minecraft Handoff - HOST FIXTURE");});
+        ClientPlayConnectionEvents.DISCONNECT.register((handler,client)->{epoch=sequence=0;JOIN_STATE.onDisconnect();});
         ClientTickEvents.END_CLIENT_TICK.register(ViewerClient::tick);
     }
-    public static void receive(String text){if((!THIN&&!LAB)||!text.startsWith(ControlWire.PREFIX))return;Minecraft mc=Minecraft.getInstance();mc.execute(()->{
+    private static final ViewerJoinState JOIN_STATE=new ViewerJoinState(ViewerClient::send,(snapshot,elapsed)->{var plan=tw.handoff.sao.SaoSnapshot.prepare(Minecraft.getInstance().getClass().getClassLoader(),snapshot,elapsed);return plan::apply;},command->Minecraft.getInstance().execute(command),System::nanoTime,text->Minecraft.getInstance().execute(()->Minecraft.getInstance().gui.setOverlayMessage(Component.literal(text),false)));
+    public static void receive(String text){if((!THIN&&!LAB)||!text.startsWith(ControlWire.PREFIX))return;if(JOIN_STATE.receive(text,System.nanoTime()))return;Minecraft mc=Minecraft.getInstance();mc.execute(()->{
         try{
             if(text.startsWith(ControlWire.PREFIX+"R:")){epoch=Long.parseLong(text.substring((ControlWire.PREFIX+"R:").length()));sequence=0;mc.getWindow().setTitle(epoch>0?"Minecraft Handoff - CONTROLLER (F7 release)":"Minecraft Handoff - SPECTATOR (F6 take control)");mc.gui.setOverlayMessage(Component.literal(epoch>0?"已取得控制權 · F7 釋放":"觀察中 · F6 接管"),false);}
             else if(text.startsWith(ControlWire.PREFIX+"E:"))mc.gui.setOverlayMessage(Component.literal(text.substring((ControlWire.PREFIX+"E:").length())),false);
