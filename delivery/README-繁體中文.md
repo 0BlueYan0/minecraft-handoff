@@ -1,8 +1,23 @@
-# Minecraft Handoff 0.2.0 原型
+# Minecraft Handoff 原型
 
 Mac 保留由原本 Triggers 啟動器開啟、已通過驗證的 Minecraft。Windows 使用自己的遊戲引擎、模組和顯示卡繪製畫面，透過私人接力入口操作 Mac 那名玩家。Windows 不會再次登入 SAO；關閉 Windows 操作端也不應使 Mac 的原連線離線。
 
 **這個版本還在測試。** Windows 加入時會先拿到 Mac 目前的 SAO 技能列、等級、魔力或體力、冷卻、任務 HUD 與祝福欄位，對得上才交出控制權，對不上就停在觀察並標出缺的那一塊。裝備、隊伍、技能側欄這類介面，要在 Windows 拿到控制權後打開，由遊戲自己向伺服器要資料。以上只在本機測試伺服器驗過，還沒在 SAO 伺服器和 Mac 實機驗過，不能把此包視為已完成的 SAO 無縫接力成品。
+
+## 安裝與更新
+
+第一次安裝只要做一次，Mac 與 Windows 各自做。
+
+1. 開啟 <https://github.com/0BlueYan0/minecraft-handoff/releases/latest>，下載 `minecraft-handoff.zip`。
+2. 解壓縮到自己的資料夾。
+3. Mac 照「Mac 常駐端怎麼開」，Windows 照「Windows 操作端怎麼開」。
+
+之後每次啟動，腳本會先檢查有沒有新版，有就自動下載、檢查檔案完整、換成新版，再用同樣的設定重新啟動。配對檔與遊戲設定不會被動到。網路連不上或下載失敗時，會顯示一行說明，接著用現有的版本繼續啟動。
+
+- 更新時 `lib`、`mac`、`windows` 三個資料夾會整個換掉，不要把自己的檔案放進去。
+- 不想自動更新時，啟動前設定 `HANDOFF_NO_UPDATE=1`。Mac 在 Terminal 執行 `export HANDOFF_NO_UPDATE=1`，Windows 在命令提示字元執行 `set HANDOFF_NO_UPDATE=1`。
+- 更新後 Mac 常駐端要先在舊視窗按 Ctrl+C，再重新執行 `Start-Host.command`，新版才會生效。
+- 第一次升級到支援免重開遊戲更新的版本時，Mac 的遊戲要重開一次。
 
 ## 適用環境
 
@@ -32,6 +47,12 @@ Mac 保留由原本 Triggers 啟動器開啟、已通過驗證的 Minecraft。Wi
 
 6. 把這個 `pairing.json` 私下傳到自己的 Windows。它含**控制你遊戲的權限**，請勿公開；它不含 Triggers／Microsoft 登入 token。不要傳 `host.p12` 或 `keystore.password`。
 
+`pairing.json` 只有第一次需要傳到 Windows，之後重開 Mac 常駐端會沿用同一份。Mac 的 IP 也只有第一次要輸入，之後直接按 Enter 就會沿用。要換一份新的配對時，用下面這行執行，換完要重新傳一次 `pairing.json`：
+
+```bash
+HANDOFF_NEW_PAIRING=1 ./Start-Host.command
+```
+
 第一次執行可以不賦予 `.command` 執行權限，直接用上述 `bash` 指令。腳本使用 `caffeinate -i` 避免系統閒置睡眠。原本遊戲仍必須持續運作；先保持視窗沒有最小化，也不要鎖定／登出 Mac。
 
 若遊戲目錄不同，可在執行前指定，例如：
@@ -51,8 +72,22 @@ Mac 常駐端沒人操作時，每 5 分鐘會自己在遊戲裡前、右、後�
 ## Windows 操作端怎麼開
 
 1. 解壓縮相同版本的包，保留資料夾結構；將 Mac 的 `pairing.json` 放在自己方便找到的位置。
-2. **不必用 Triggers 再開一個登入 SAO 的遊戲。** 雙擊 `windows\Start-Viewer.cmd`，依提示輸入配對檔完整路徑。
-3. 程式先檢查 Mac 憑證與配對權限，再啟動獨立的 Minecraft。第一次會複製本機模組與資源包，等候時間較長。
+2. **不必用 Triggers 再開一個登入 SAO 的遊戲。** 雙擊 `windows\Start-Viewer.cmd`，它會依序問兩件事：
+   - Triggers 資料夾（裡面有 `versions`、`runtime`、`instances`）。直接按 Enter 就用預設的 `%APPDATA%\.Triggers Client`。
+   - 配對檔完整路徑。
+
+   Java 21 依序找 Triggers 資料夾裡的 `runtime`、`%LOCALAPPDATA%\MinecraftHandoff\jdk21`、`JAVA_HOME`、`PATH`。都找不到時，會用 Windows 內建的 curl 下載 Eclipse Temurin JDK 21.0.13（約 205 MB），比對 SHA-256 之後解壓到 `%LOCALAPPDATA%\MinecraftHandoff\jdk21`。下載失敗就改問 `java.exe` 的完整路徑。這個檔案不需要 PowerShell，也不需要管理員權限。
+
+   也可以在 cmd 一次帶好參數：
+
+   ```bat
+   windows\Start-Viewer.cmd -Pairing "C:\你的資料夾\pairing.json" -Install "D:\Triggers Client"
+   ```
+   > Mac 掛著的時候，Windows 不要打開 Triggers Client 啟動遊戲。兩次在 Windows 用同一個帳號從 Triggers Client 開遊戲之後，Mac 在 10 分鐘內被判定「啟動器工作階段已過期或無效」而斷線。操作端只讀 Triggers 資料夾裡已經下載好的檔案，不需要開 Triggers Client。
+3. 程式先檢查 Mac 憑證與配對權限，再啟動獨立的 Minecraft。視窗會顯示目前在做什麼：
+   - 第一次會複製本機模組與資源包，顯示 `Copying game files: 已複製/總數 (MB)`，約 1 GB。
+   - 之後只檢查有沒有變，顯示 `Checking game files: 數量`，再顯示 `Game files up to date`。
+   - Minecraft 載入期間每 10 秒顯示一次 `Minecraft loading... 秒數`，大約要 2 到 4 分鐘。
 4. 世界載入完成後會自動嘗試接管。視窗標題 `CONTROLLER` 表示能操作；`SPECTATOR` 表示觀察。按 **F6** 接管、**F7** 釋放。筆電可能需要搭配 Fn。
 
 也可在 PowerShell 執行：
@@ -75,9 +110,10 @@ Mac 常駐端沒人操作時，每 5 分鐘會自己在遊戲裡前、右、後�
 
 - A 操作中，B 啟動自己的操作端並載入世界；B 完成後接管，A 轉為觀察。
 - 關閉操作端會釋放控制。短暫沒有輸入時會鬆開按鍵；逾時會撤銷控制權。
+- Windows 被 Mac 斷線時，斷線畫面的「重新連線到 Mac」會直接連回去，不用關掉 cmd 重開。斷線畫面上的原因文字請記下來，回報問題時用得到。
 - Mac 遊戲視窗按 **F8**，可強制取回本機控制。遠端操作時 Mac 本機鍵鼠會暫時被隔離，避免同時操控。
 - Mac Terminal 按 **Ctrl+C** 只關掉加密入口，不會關閉遊戲或原啟動器。已附加的 loopback 橋接仍隨原遊戲存在。
-- 再次啟動常駐服務會產生新的配對 token；把新的 `pairing.json` 傳給要使用的電腦，舊檔立即無法通過新服務驗證。
+- 重開 Mac 常駐端會沿用原本的 `pairing.json`。用 `HANDOFF_NEW_PAIRING=1` 換新之後，把新的 `pairing.json` 傳給要使用的電腦，舊檔立即無法通過驗證。
 - 關閉／重開原遊戲後 PID 會變，必須重新啟動常駐服務。更新 bridge 程式也需要原遊戲下次正常啟動，不能把重複附加當成熱更新。
 - 啟動腳本結束後若操作端遊戲仍開著，先關閉該視窗再重新啟動。資料夾鎖會防止兩個遊戲同時寫入同一個操作端實例。
 
