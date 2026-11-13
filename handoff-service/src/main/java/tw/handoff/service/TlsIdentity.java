@@ -9,6 +9,17 @@ final class TlsIdentity {
  SSLContext context(){return context;}String fingerprint(){return fingerprint;}
  private TlsIdentity(SSLContext context,String fingerprint){this.context=context;this.fingerprint=fingerprint;}
  static String randomToken(){byte[] bytes=new byte[32];new SecureRandom().nextBytes(bytes);return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);}
+ /** The host token kept in the state folder so the pairing file stays the same across restarts; renew=true replaces it. */
+ static String pairingToken(Path state,boolean renew)throws IOException{
+  Files.createDirectories(state);PrivateFiles.restrict(state,true);
+  Path file=state.resolve("pairing.token");
+  if(Files.isSymbolicLink(file))throw new IOException("Symbolic credential file refused");
+  if(renew)Files.deleteIfExists(file);
+  if(Files.exists(file)){
+   try{String saved=Files.readString(file).trim();if(saved.matches("[A-Za-z0-9_-]{43}"))return saved;}catch(java.nio.charset.CharacterCodingException unreadable){}
+  }
+  String token=randomToken();PrivateFiles.write(file,token);return token;
+ }
  static TlsIdentity open(Path state)throws Exception{
   Files.createDirectories(state);PrivateFiles.restrict(state,true);
   Path passwordFile=state.resolve("keystore.password"),store=state.resolve("host.p12");

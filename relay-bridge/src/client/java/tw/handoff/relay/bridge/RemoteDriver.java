@@ -19,11 +19,30 @@ final class RemoteDriver {
   this.mc=mc;this.emergency=emergency;
   Field g=null;for(String alias:new String[]{"mouseGrabbed","field_1783"})try{g=mc.mouseHandler.getClass().getDeclaredField(alias);break;}catch(NoSuchFieldException ignored){}
   if(g==null)throw new IllegalStateException("Mouse state contract unavailable");grabbed=g;grabbed.setAccessible(true);
-  long window=mc.getWindow().getWindow();
-  keyboard=GLFW.glfwSetKeyCallback(window,(w,k,s,a,m)->{if(active){if(k==GLFW.GLFW_KEY_F8&&a==GLFW.GLFW_PRESS)mc.execute(emergency);}else{human();if(keyboard!=null)keyboard.invoke(w,k,s,a,m);}});
-  buttons=GLFW.glfwSetMouseButtonCallback(window,(w,b,a,m)->{if(!active){human();if(buttons!=null)buttons.invoke(w,b,a,m);}});
-  cursor=GLFW.glfwSetCursorPosCallback(window,(w,x,y)->{if(!active){human();if(cursor!=null)cursor.invoke(w,x,y);}});
-  scroll=GLFW.glfwSetScrollCallback(window,(w,x,y)->{if(!active){human();if(scroll!=null)scroll.invoke(w,x,y);}});
+  window=mc.getWindow().getWindow();
+  // The callbacks are kept so dispose can tell whether they are still the ones GLFW calls. Once disposed they only pass events on to the callbacks they replaced.
+  keyboardOurs=GLFWKeyCallback.create((w,k,s,a,m)->{if(!disposed&&active){if(k==GLFW.GLFW_KEY_F8&&a==GLFW.GLFW_PRESS)mc.execute(emergency);}else{if(!disposed)human();if(keyboard!=null)keyboard.invoke(w,k,s,a,m);}});
+  keyboard=GLFW.glfwSetKeyCallback(window,keyboardOurs);
+  buttonsOurs=GLFWMouseButtonCallback.create((w,b,a,m)->{if(disposed||active){if(disposed&&buttons!=null)buttons.invoke(w,b,a,m);}else{human();if(buttons!=null)buttons.invoke(w,b,a,m);}});
+  buttons=GLFW.glfwSetMouseButtonCallback(window,buttonsOurs);
+  cursorOurs=GLFWCursorPosCallback.create((w,x,y)->{if(disposed||active){if(disposed&&cursor!=null)cursor.invoke(w,x,y);}else{human();if(cursor!=null)cursor.invoke(w,x,y);}});
+  cursor=GLFW.glfwSetCursorPosCallback(window,cursorOurs);
+  scrollOurs=GLFWScrollCallback.create((w,x,y)->{if(disposed||active){if(disposed&&scroll!=null)scroll.invoke(w,x,y);}else{human();if(scroll!=null)scroll.invoke(w,x,y);}});
+  scroll=GLFW.glfwSetScrollCallback(window,scrollOurs);
+ }
+ private final long window;private volatile boolean disposed;
+ private final GLFWKeyCallback keyboardOurs;private final GLFWMouseButtonCallback buttonsOurs;private final GLFWCursorPosCallback cursorOurs;private final GLFWScrollCallback scrollOurs;
+ /**
+  * Gives control back and takes this driver out of the window's callback chain (game thread). A callback that something else was chained after cannot be unlinked without dropping that one,
+  * so it stays, passes events on, and is not freed. Without this a replaced bridge keeps swallowing keyboard, mouse and scroll events while a viewer drives.
+  */
+ void dispose(){
+  if(disposed)return;
+  end();disposed=true;humanInput=null;
+  GLFWKeyCallback k=GLFW.glfwSetKeyCallback(window,keyboard);if(k!=null&&k.address()==keyboardOurs.address())keyboardOurs.free();else GLFW.glfwSetKeyCallback(window,k);
+  GLFWMouseButtonCallback b=GLFW.glfwSetMouseButtonCallback(window,buttons);if(b!=null&&b.address()==buttonsOurs.address())buttonsOurs.free();else GLFW.glfwSetMouseButtonCallback(window,b);
+  GLFWCursorPosCallback c=GLFW.glfwSetCursorPosCallback(window,cursor);if(c!=null&&c.address()==cursorOurs.address())cursorOurs.free();else GLFW.glfwSetCursorPosCallback(window,c);
+  GLFWScrollCallback s=GLFW.glfwSetScrollCallback(window,scroll);if(s!=null&&s.address()==scrollOurs.address())scrollOurs.free();else GLFW.glfwSetScrollCallback(window,s);
  }
  /** Receives the time of each event the host window gets while no viewer drives it (GLFW thread). Generic mode never sets active, so every event counts there. */
  private volatile Runnable humanInput;

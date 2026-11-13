@@ -25,7 +25,8 @@ jar {
     from project(':relay-core').sourceSets.main.output
     dependsOn project(':sao-state').tasks.named('classes')
     from(project(':sao-state').sourceSets.main.output) { exclude 'tw/handoff/sao/probe/**' }
-    manifest { attributes 'Main-Class':'tw.handoff.relay.agent.HostMain', 'Agent-Class':'tw.handoff.relay.agent.EntryAgent', 'Can-Redefine-Classes':'false', 'Can-Retransform-Classes':'false' }
+    // Handoff-Agent-Version must equal EntryAgent.AGENT_VERSION; add one to both whenever anything under tw.handoff.relay.agent changes, because a running game cannot replace that package.
+    manifest { attributes 'Main-Class':'tw.handoff.relay.agent.HostMain', 'Agent-Class':'tw.handoff.relay.agent.EntryAgent', 'Can-Redefine-Classes':'false', 'Can-Retransform-Classes':'false', 'Handoff-Agent-Version':'1' }
 }
 sourceSets.test.compileClasspath += sourceSets.client.output
 sourceSets.test.runtimeClasspath += sourceSets.client.output

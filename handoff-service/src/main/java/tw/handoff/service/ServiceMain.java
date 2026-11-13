@@ -15,16 +15,16 @@ public final class ServiceMain {
   if(args.length==1&&args[0].equals("list")){for(var vm:VirtualMachine.list()){String main=vm.displayName().split(" ",2)[0];if(main.equals("net.fabricmc.loader.impl.launch.knot.KnotClient"))System.out.println("Minecraft PID "+vm.id());}return 0;}
   if(args.length<1)throw new IllegalArgumentException("Use host or viewer");
   var parsed=parse(args);
-  if(parsed.command().equals("host"))return host(parsed.options(),parsed.generic(),parsed.idleWalk());
-  if(parsed.command().equals("viewer")){if(parsed.idleWalk())throw new IllegalArgumentException("--idle-walk is for host only");return viewer(parsed.options(),parsed.vanilla(),parsed.generic());}
+  if(parsed.command().equals("host"))return host(parsed.options(),parsed.generic(),parsed.idleWalk(),parsed.newPairing());
+  if(parsed.command().equals("viewer")){if(parsed.idleWalk())throw new IllegalArgumentException("--idle-walk is for host only");if(parsed.newPairing())throw new IllegalArgumentException("--new-pairing is for host only");return viewer(parsed.options(),parsed.vanilla(),parsed.generic());}
   throw new IllegalArgumentException("Use host or viewer");
  }
- /** --vanilla, --generic and --idle-walk are flags without a value; every other option takes one. */
- record Parsed(String command,Map<String,String> options,boolean vanilla,boolean generic,boolean idleWalk){}
+ /** --vanilla, --generic, --idle-walk and --new-pairing are flags without a value; every other option takes one. */
+ record Parsed(String command,Map<String,String> options,boolean vanilla,boolean generic,boolean idleWalk,boolean newPairing){}
  static Parsed parse(String[] args){
-  var options=new HashMap<String,String>();boolean vanilla=false,generic=false,idleWalk=false;
-  for(int i=1;i<args.length;i++){if(args[i].equals("--vanilla")){vanilla=true;continue;}if(args[i].equals("--generic")){generic=true;continue;}if(args[i].equals("--idle-walk")){idleWalk=true;continue;}if(!args[i].startsWith("--")||i+1==args.length)throw new IllegalArgumentException();options.put(args[i],args[++i]);}
-  return new Parsed(args[0],options,vanilla,generic,idleWalk);
+  var options=new HashMap<String,String>();boolean vanilla=false,generic=false,idleWalk=false,newPairing=false;
+  for(int i=1;i<args.length;i++){if(args[i].equals("--vanilla")){vanilla=true;continue;}if(args[i].equals("--generic")){generic=true;continue;}if(args[i].equals("--idle-walk")){idleWalk=true;continue;}if(args[i].equals("--new-pairing")){newPairing=true;continue;}if(!args[i].startsWith("--")||i+1==args.length)throw new IllegalArgumentException();options.put(args[i],args[++i]);}
+  return new Parsed(args[0],options,vanilla,generic,idleWalk,newPairing);
  }
  /** The relay helper that attaches to the game; --generic and --idle-walk are forwarded so the agent starts packet forwarding in PRODUCTION mode and the timed walk. */
  static List<String> attachCommand(String java,Path relay,long pid,Path gameDirectory,boolean generic){return attachCommand(java,relay,pid,gameDirectory,generic,false);}
@@ -41,7 +41,16 @@ public final class ServiceMain {
   return args.toArray(String[]::new);
  }
  private static String required(Map<String,String> o,String key){String value=o.get(key);if(value==null||value.isBlank())throw new IllegalArgumentException("Missing "+key);return value;}
- private static int host(Map<String,String> o,boolean generic,boolean idleWalk)throws Exception{
+ /** The error text for a helper that exited non-zero: the status line it printed (FAILED:... or PENDING:...), plus what to do when the game holds an older agent. */
+ static String attachFailure(String output){
+  String line=output.lines().map(String::strip).filter(l->l.matches("(?:FAILED|PENDING):.{0,200}")).findFirst().orElse(null);
+  if(line==null)return "Original game attach failed";
+  String message="Original game attach failed: "+line;
+  // A PENDING line after the full wait means the game holds an agent that ignored these options, which is the case for every game that has not been restarted since this update.
+  if(line.equals("FAILED:AGENT:RestartGame")||line.startsWith("PENDING:"))message+=". The relay agent already inside the game is older than this jar and cannot be replaced while the game runs. Restart the game once, then run Start-Host again.";
+  return message;
+ }
+ private static int host(Map<String,String> o,boolean generic,boolean idleWalk,boolean newPairing)throws Exception{
   Path state=Path.of(required(o,"--state")).toAbsolutePath();Files.createDirectories(state);PrivateFiles.restrict(state,true);
   try(var lockFile=FileChannel.open(state.resolve("service.lock"),StandardOpenOption.CREATE,StandardOpenOption.WRITE);var lock=lockFile.tryLock()){
    if(lock==null)throw new IllegalStateException("Host service already running");
@@ -53,16 +62,17 @@ public final class ServiceMain {
    attach.redirectError(ProcessBuilder.Redirect.DISCARD);Process helper=attach.start();
    if(!helper.waitFor(75,TimeUnit.SECONDS)){helper.destroyForcibly();throw new IllegalStateException("Attach timed out");}
    String output=new String(helper.getInputStream().readNBytes(4096),java.nio.charset.StandardCharsets.UTF_8);
-   if(helper.exitValue()!=0)throw new IllegalStateException("Original game attach failed");
+   if(helper.exitValue()!=0)throw new IllegalStateException(attachFailure(output));
    String ready=output.lines().filter(line->line.matches("READY:[0-9]{1,5}:[0-9a-f-]{36}:[A-Za-z0-9_]{1,16}")).findFirst().orElseThrow();String[] fields=ready.split(":");
-   int nativePort=Integer.parseInt(fields[1]);String token=TlsIdentity.randomToken();var identity=TlsIdentity.open(state);
+   int nativePort=Integer.parseInt(fields[1]);String token=TlsIdentity.pairingToken(state,newPairing);var identity=TlsIdentity.open(state);
    int port=Integer.parseInt(o.getOrDefault("--port","25575"));String address=o.getOrDefault("--bind","0.0.0.0"),published=required(o,"--pair-host");
    try(var tunnel=new HostTunnel(identity.context(),InetAddress.getByName(address),port,nativePort,token)){
     var pair=new Pairing(2,published,tunnel.port(),identity.fingerprint(),token,fields[3],fields[2]);
-    Path pairing=Path.of(o.getOrDefault("--pair-out",state.resolve("pairing.json").toString())).toAbsolutePath();PrivateFiles.write(pairing,new Gson().toJson(pair));
+    Path pairing=Path.of(o.getOrDefault("--pair-out",state.resolve("pairing.json").toString())).toAbsolutePath();boolean written=PairingFile.writeIfChanged(pairing,new Gson().toJson(pair));
     Runtime.getRuntime().addShutdownHook(new Thread(tunnel::close));tunnel.start();
     System.out.println("HOST_READY: encrypted port "+tunnel.port()+"; original Minecraft PID "+pid);
     System.out.println("Pairing file: "+pairing+" (contains remote-control credentials; transfer privately)");
+    System.out.println(written?"New pairing created; copy pairing.json to Windows.":"Pairing unchanged; Windows can keep using its copy.");
     System.out.println("Leave the original launcher and game open. Ctrl+C stops remote access only. Host F8 releases control.");
     while(game.isAlive())Thread.sleep(1000);
    }

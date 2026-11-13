@@ -28,5 +28,6 @@ final class NativeFrontend implements AutoCloseable {
             }).bind(InetAddress.getLoopbackAddress(),port).syncUninterruptibly().channel();
     }
     int port(){return ((java.net.InetSocketAddress)server.localAddress()).getPort();}
-    public void close(){server.close();}
+    /** Waits until the listening socket is closed, so a stopped bridge no longer accepts viewers when this returns. */
+    public void close(){if(!server.close().awaitUninterruptibly(5000))throw new IllegalStateException("Frontend close timed out");}
 }

@@ -75,14 +75,16 @@ final class NativePeer implements InvocationHandler {
             connection.send(new ClientboundSelectKnownPacks(List.of()));
         }else if(packet instanceof ServerboundSelectKnownPacks){
             lifecycle.packsSelected();
-            RegistrySynchronization.packRegistries(host.registries().createSerializationContext(NbtOps.INSTANCE),host.registries(),Set.of(),
+            // One read, so the registries sent here are the ones the play protocol binds below.
+            registries=host.registries();
+            RegistrySynchronization.packRegistries(registries.createSerializationContext(NbtOps.INSTANCE),registries,Set.of(),
                 (key,entries)->connection.send(new ClientboundRegistryDataPacket(key,entries)));
-            connection.send(RegistryTags.packet(host.registries()));
+            connection.send(RegistryTags.packet(registries));
             connection.send(ClientboundFinishConfigurationPacket.INSTANCE);
         }else if(packet instanceof ServerboundFinishConfigurationPacket){
             lifecycle.configurationFinished();protocol=ConnectionProtocol.PLAY;
-            connection.setupOutboundProtocol(GameProtocols.CLIENTBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(host.registries())));
-            connection.setupInboundProtocol(GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(host.registries())),(ServerGamePacketListener)listener);
+            connection.setupOutboundProtocol(GameProtocols.CLIENTBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(registries)));
+            connection.setupInboundProtocol(GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(registries)),(ServerGamePacketListener)listener);
             host.snapshot(this);
         }else if(packet instanceof ServerboundPlayerLoadedPacket){
             host.minecraft().execute(()->{if(!closed){lifecycle.playerLoaded();host.ready(this);}});
@@ -90,7 +92,8 @@ final class NativePeer implements InvocationHandler {
             // Private frontend terminates its own liveness; never forward to SAO.
         }else if(protocol==ConnectionProtocol.PLAY&&lifecycle.active())host.input(this,packet);
     }
-    void send(Packet<?> packet){if(closed)return;sendFrames(host.codec.freeze(packet));}
+    private net.minecraft.core.RegistryAccess.Frozen registries;
+    void send(Packet<?> packet){if(closed)return;sendFrames(host.codec().freeze(packet));}
     void sendFrames(List<byte[]> frames){
         if(closed)return;
         for(byte[] frame:frames){

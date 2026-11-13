@@ -38,7 +38,7 @@ final class PacketLab {
  }
  static boolean local(String name){return LOCAL.contains(name)||name.contains("cookie")||name.contains("configuration");}
  void install(){
-  byte[] brand=host.codec.freeze(new ClientboundCustomPayloadPacket(new BrandPayload("lab-wire-id"))).getFirst();int id=OpaqueFrames.readVarInt(brand,new int[]{0});
+  byte[] brand=host.codec().freeze(new ClientboundCustomPayloadPacket(new BrandPayload("lab-wire-id"))).getFirst();int id=OpaqueFrames.readVarInt(brand,new int[]{0});
   Map<Integer,String> names=new HashMap<>();GameProtocols.CLIENTBOUND_TEMPLATE.listPackets((type,number)->names.put(number,type.id().getPath()));
   java.util.function.Consumer<byte[]> sink=frame->{for(NativePeer peer:host.peers())if(peer.live)try{peer.sendFrames(List.of(frame));}catch(RuntimeException|LinkageError failed){peer.close("Lab viewer stream failed");}};
   // OrderedWireMirror requires a journal; PRODUCTION has none, so it applies the same filters inline.
@@ -46,7 +46,7 @@ final class PacketLab {
    int number=OpaqueFrames.readVarInt(frame,new int[]{0});if(!MirrorRules.wire(names.get(number)))return;
    if(number==id&&!OpaqueFrames.gameplayChannel(OpaqueFrames.inspect(frame).channel()))return;
    sink.accept(frame.clone());};
-  channel.eventLoop().submit(()->channel.pipeline().addBefore("decoder","handoff_opaque_lab",new ChannelInboundHandlerAdapter(){
+  channel.eventLoop().submit(()->channel.pipeline().addBefore("decoder",HANDLER,new ChannelInboundHandlerAdapter(){
    public void channelRead(ChannelHandlerContext ctx,Object msg)throws Exception{
     byte[] copy=null;if(msg instanceof ByteBuf b&&b.readableBytes()<=8*1024*1024){copy=new byte[b.readableBytes()];b.getBytes(b.readerIndex(),copy);}
     ctx.fireChannelRead(msg);
@@ -54,6 +54,9 @@ final class PacketLab {
    }
   })).syncUninterruptibly();
  }
+ static final String HANDLER="handoff_opaque_lab";
+ /** Takes the wire handler install added out of the original pipeline. */
+ void uninstall(){HostBridge.removeHandler(channel,HANDLER);}
  void replay(NativePeer peer){replay(peer::sendFrames);}
  void replay(java.util.function.Consumer<List<byte[]>> sink){var frames=replayFrames();if(!frames.isEmpty())sink.accept(frames);}
  /** Everything forward checks between decoding and writing upstream; false means the frame is dropped. */

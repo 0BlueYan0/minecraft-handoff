@@ -43,6 +43,14 @@ class ServiceMainArgsTest {
     @Test void viewerRefusesIdleWalk(){
         assertThrows(IllegalArgumentException.class,()->ServiceMain.run(new String[]{"viewer","--pair","p","--idle-walk"}));
     }
+    @Test void newPairingIsAFlagWithoutValueAndOffByDefault(){
+        assertFalse(ServiceMain.parse(new String[]{"host","--pid","7"}).newPairing());
+        var on=ServiceMain.parse(new String[]{"host","--pid","7","--new-pairing","--generic","--idle-walk","--state","s"});
+        assertTrue(on.newPairing());assertTrue(on.generic());assertTrue(on.idleWalk());assertEquals(Map.of("--pid","7","--state","s"),on.options());
+    }
+    @Test void viewerRefusesNewPairing(){
+        assertThrows(IllegalArgumentException.class,()->ServiceMain.run(new String[]{"viewer","--pair","p","--new-pairing"}));
+    }
     @Test void viewerArgumentsCarryTheFlagToViewerMain(){
         var o=Map.of("--install","i","--viewer-dir","v","--guard","g");
         assertTrue(List.of(ServiceMain.viewerArguments(o,"9",PAIR,false,true)).contains("--generic"));

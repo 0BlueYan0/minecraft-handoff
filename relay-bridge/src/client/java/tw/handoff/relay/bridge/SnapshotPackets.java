@@ -8,6 +8,7 @@ import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.GameType;
 
 final class SnapshotPackets {
+    private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger("minecraft-handoff-relay");
     static void send(HostBridge host,NativePeer peer)throws ReflectiveOperationException{
         var mc=host.minecraft();var player=mc.player;var level=mc.level;
         if(player==null||level==null)throw new IllegalStateException("Host world changed");
@@ -27,7 +28,9 @@ final class SnapshotPackets {
         peer.send(ClientboundPlayerPositionPacket.of(1,PositionMoveRotation.of(player),Set.of()));
         peer.send(new ClientboundSetTimePacket(level.getGameTime(),level.getDayTime(),true));
         peer.send(new ClientboundSetDefaultSpawnPositionPacket(level.getSharedSpawnPos(),level.getSharedSpawnAngle()));
-        peer.send(new ClientboundCommandsPacket(mc.getConnection().getCommands().getRoot()));
+        var commands=CommandTreeFilter.copy(mc.getConnection().getCommands().getRoot(),CommandTreeFilter::serializable);
+        if(!commands.dropped().isEmpty())LOG.info("Viewer command tree leaves out {} client-only commands: {}",commands.dropped().size(),commands.dropped());
+        peer.send(new ClientboundCommandsPacket(commands.root()));
         peer.send(ClientboundChunkBatchStartPacket.INSTANCE);
         int count=0;long start=System.nanoTime();
         for(int x=-radius;x<=radius;x++)for(int z=-radius;z<=radius;z++){

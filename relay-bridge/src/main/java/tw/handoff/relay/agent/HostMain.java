@@ -22,7 +22,7 @@ public final class HostMain {
                 // An attached JVM keeps its agent archive open. Do not lock the distributable/build output.
                 Path agentCopy=directory.resolve("relay-agent.jar");Files.copy(self,agentCopy);
                 VirtualMachine vm=VirtualMachine.attach(Long.toString(pid));
-                try{vm.loadAgent(agentCopy.toString(),agentOptions(status,game,flags.generic(),flags.idleWalk()));}finally{vm.detach();}
+                try{vm.loadAgent(agentCopy.toString(),agentOptions(status,game,flags.generic(),flags.idleWalk(),agentCopy));}finally{vm.detach();}
                 long start=System.nanoTime();
                 while(System.nanoTime()-start<60_000_000_000L){
                     String result=Files.readString(status);
@@ -51,6 +51,8 @@ public final class HostMain {
     static boolean parseGeneric(String[] args){return parseFlags(args).generic();}
     /** Mode field g or -, then the idle walk field w only when it is on, so a host without it keeps the four-field form. */
     static String agentOptions(Path status,Path game,boolean generic,boolean idleWalk){return agentOptions(status,game,generic)+(idleWalk?".w":"");}
+    /** Adds the jar field: the copy attached this time. The agent class already in the game is from the first attach, so it cannot find the new jar by itself. Always the full six fields, since the jar field comes after the mode and idle walk fields. */
+    static String agentOptions(Path status,Path game,boolean generic,boolean idleWalk,Path jar){return encode(status.toString())+"."+encode(game.toString())+".0."+(generic?"g":"-")+"."+(idleWalk?"w":"-")+"."+encode(jar.toString());}
     static String agentOptions(Path status,Path game,boolean generic){return encode(status.toString())+"."+encode(game.toString())+".0."+(generic?"g":"-");}
     private static String encode(String value){return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));}
 }

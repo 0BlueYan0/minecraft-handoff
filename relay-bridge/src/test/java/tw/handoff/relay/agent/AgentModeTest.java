@@ -65,19 +65,101 @@ class AgentModeTest {
         assertThrows(IllegalArgumentException.class,()->HostMain.parseFlags(concat(base,"--idle-walk","--generic","--generic")));
     }
     private static String[] concat(String[] a,String... b){var r=new String[a.length+b.length];System.arraycopy(a,0,r,0,a.length);System.arraycopy(b,0,r,a.length,b.length);return r;}
-    @Test void repeatAttachWithDifferentIdleWalkFailsInsteadOfKeepingTheFirst(){
-        assertNull(EntryAgent.claim(true,true));assertEquals("",EntryAgent.claim(true,true));
-        assertEquals("FAILED:MODE:Mismatch",EntryAgent.claim(true,false));assertEquals("FAILED:MODE:Mismatch",EntryAgent.claim(false,true));assertEquals("FAILED:MODE:Mismatch",EntryAgent.claim(false,false));
-        EntryAgent.resetForTest();
-        assertNull(EntryAgent.claim(true,false));assertEquals("FAILED:MODE:Mismatch",EntryAgent.claim(true,true));assertEquals("",EntryAgent.claim(true));
+    @Test void jarFieldIsOptionalAndOldFormsHaveNone(@TempDir Path dir)throws Exception{
+        String b=base(dir);Path jar=Files.createFile(dir.resolve("relay-agent.jar"));
+        assertNull(EntryAgent.parse(b).jar());assertNull(EntryAgent.parse(b+".g").jar());assertNull(EntryAgent.parse(b+".g.w").jar());
+        var o=EntryAgent.parse(b+".g.w."+enc(jar));assertEquals(jar.toRealPath(),o.jar());assertTrue(o.generic());assertTrue(o.idleWalk());
+        var plain=EntryAgent.parse(b+".-.-."+enc(jar));assertEquals(jar.toRealPath(),plain.jar());assertFalse(plain.generic());assertFalse(plain.idleWalk());
+        assertNull(EntryAgent.parse(b+".g.w."+enc(dir.resolve("missing.jar"))));assertNull(EntryAgent.parse(b+".g.w."+enc(dir)));
+        assertNull(EntryAgent.parse(b+".g.w."+enc(jar)+".x"));assertNull(EntryAgent.parse(b+".g.w."));
     }
-    @Test void repeatAttachWithSameModeKeepsStatus(){
-        assertNull(EntryAgent.claim(true));assertEquals("",EntryAgent.claim(true));
+    @Test void hostMainWritesAllSixFieldsWithTheAttachedJar(@TempDir Path dir)throws Exception{
+        Path status=Files.createFile(dir.resolve("status")),jar=Files.createFile(dir.resolve("relay-agent.jar"));
+        for(boolean generic:new boolean[]{false,true})for(boolean walk:new boolean[]{false,true}){
+            String options=HostMain.agentOptions(status,dir,generic,walk,jar);
+            assertEquals(6,options.split("\\.",-1).length);
+            var o=EntryAgent.parse(options);assertNotNull(o);assertEquals(generic,o.generic());assertEquals(walk,o.idleWalk());assertEquals(jar.toRealPath(),o.jar());
+        }
     }
-    @Test void repeatAttachWithDifferentModeFailsInsteadOfKeepingTheFirst(){
-        assertNull(EntryAgent.claim(false));assertEquals("FAILED:MODE:Mismatch",EntryAgent.claim(true));assertEquals("",EntryAgent.claim(false));
-        EntryAgent.resetForTest();
-        assertNull(EntryAgent.claim(true));assertEquals("FAILED:MODE:Mismatch",EntryAgent.claim(false));
-        assertTrue("FAILED:MODE:Mismatch".matches("FAILED:[A-Z_]+:[A-Za-z0-9_$]+"));
+    @Test void firstAttachStartsAndSameJarAndSettingsKeep(){
+        assertEquals(EntryAgent.Action.START,EntryAgent.claim("a",EntryAgent.AGENT_VERSION,true,false));
+        assertEquals(EntryAgent.Action.KEEP,EntryAgent.claim("a",EntryAgent.AGENT_VERSION,true,false));
+    }
+    @Test void differentJarReloads(){
+        EntryAgent.claim("a",EntryAgent.AGENT_VERSION,true,true);
+        assertEquals(EntryAgent.Action.RELOAD,EntryAgent.claim("b",EntryAgent.AGENT_VERSION,true,true));
+        assertEquals(EntryAgent.Action.KEEP,EntryAgent.claim("b",EntryAgent.AGENT_VERSION,true,true));
+    }
+    @Test void differentSettingsReloadInsteadOfFailing(){
+        EntryAgent.claim("a",EntryAgent.AGENT_VERSION,true,true);
+        assertEquals(EntryAgent.Action.RELOAD,EntryAgent.claim("a",EntryAgent.AGENT_VERSION,false,true));
+        assertEquals(EntryAgent.Action.RELOAD,EntryAgent.claim("a",EntryAgent.AGENT_VERSION,false,false));
+        assertEquals(EntryAgent.Action.RELOAD,EntryAgent.claim("a",EntryAgent.AGENT_VERSION,true,false));
+        assertEquals(EntryAgent.Action.KEEP,EntryAgent.claim("a",EntryAgent.AGENT_VERSION,true,false));
+    }
+    @Test void otherAgentVersionAsksForRestartAndChangesNothing(){
+        assertEquals(EntryAgent.Action.RESTART_GAME,EntryAgent.claim("a",EntryAgent.AGENT_VERSION+1,true,true));
+        assertEquals(EntryAgent.Action.START,EntryAgent.claim("a",EntryAgent.AGENT_VERSION,true,true));
+        assertEquals(EntryAgent.Action.RESTART_GAME,EntryAgent.claim("b",EntryAgent.AGENT_VERSION+1,true,true));
+        assertEquals(EntryAgent.Action.RESTART_GAME,EntryAgent.claim("a",-1,true,true));
+        assertEquals(EntryAgent.Action.KEEP,EntryAgent.claim("a",EntryAgent.AGENT_VERSION,true,true));
+    }
+    private static EntryAgent.Starter starting(String result,java.util.List<String> log,EntryAgent.Stopper stopper){return ()->{log.add("start "+result);return new EntryAgent.Started(result,stopper);};}
+    @Test void firstSwapStartsWithoutStopping()throws Exception{
+        var log=new java.util.ArrayList<String>();
+        assertEquals("one",EntryAgent.swap(starting("one",log,()->log.add("stop one"))));
+        assertEquals(java.util.List.of("start one"),log);assertTrue(EntryAgent.hasRunningBridge());
+    }
+    @Test void secondSwapStopsTheOldBridgeBeforeStartingTheNewOne()throws Exception{
+        var log=new java.util.ArrayList<String>();
+        EntryAgent.swap(starting("one",log,()->log.add("stop one")));
+        assertEquals("two",EntryAgent.swap(starting("two",log,()->log.add("stop two"))));
+        assertEquals(java.util.List.of("start one","stop one","start two"),log);
+    }
+    @Test void stopFailureKeepsTheOldBridgeAndNeverStartsTheNewOne()throws Exception{
+        var log=new java.util.ArrayList<String>();
+        EntryAgent.swap(starting("one",log,()->{log.add("stop one");throw new IllegalStateException("stuck");}));
+        var failure=assertThrows(EntryAgent.StopFailure.class,()->EntryAgent.swap(starting("two",log,()->log.add("stop two"))));
+        assertEquals(IllegalStateException.class,failure.getCause().getClass());
+        assertEquals(java.util.List.of("start one","stop one"),log);assertTrue(EntryAgent.hasRunningBridge());
+        // The failed attach is unclaimed by agentmain, so the next attach is a START that tries the stop again.
+        assertEquals(EntryAgent.Action.START,startAfterFailure("a","b"));
+        assertThrows(EntryAgent.StopFailure.class,()->EntryAgent.swap(starting("two",log,()->log.add("stop two"))));
+        assertEquals(java.util.List.of("start one","stop one","stop one"),log);
+    }
+    @Test void linkageErrorInStopCountsAsStopFailure()throws Exception{
+        EntryAgent.swap(()->new EntryAgent.Started("one",()->{throw new NoClassDefFoundError("x");}));
+        assertThrows(EntryAgent.StopFailure.class,()->EntryAgent.swap(()->new EntryAgent.Started("two",()->{})));
+    }
+    @Test void startFailureAfterStopLeavesNothingRunningAndTheNextSwapStartsAgain()throws Exception{
+        var log=new java.util.ArrayList<String>();
+        EntryAgent.swap(starting("one",log,()->log.add("stop one")));
+        assertThrows(IllegalStateException.class,()->EntryAgent.swap(()->{log.add("start two");throw new IllegalStateException("bad jar");}));
+        assertEquals(java.util.List.of("start one","stop one","start two"),log);assertFalse(EntryAgent.hasRunningBridge());
+        assertEquals(EntryAgent.Action.START,startAfterFailure("a","b"));
+        assertEquals("three",EntryAgent.swap(starting("three",log,()->log.add("stop three"))));
+        assertEquals("start three",log.get(log.size()-1));assertFalse(log.subList(3,log.size()).contains("stop one"));
+    }
+    /** What agentmain does after a failed swap: unclaim, so the next claim does not see the failed jar as running. */
+    private static EntryAgent.Action startAfterFailure(String shaBefore,String shaFailed){
+        EntryAgent.claim(shaBefore,EntryAgent.AGENT_VERSION,true,true);EntryAgent.claim(shaFailed,EntryAgent.AGENT_VERSION,true,true);
+        EntryAgent.unclaim();return EntryAgent.claim(shaFailed,EntryAgent.AGENT_VERSION,true,true);
+    }
+    @Test void restartStatusMatchesTheHelperStatusPattern(){
+        assertEquals("FAILED:AGENT:RestartGame",EntryAgent.RESTART_GAME_STATUS);
+        assertTrue(EntryAgent.RESTART_GAME_STATUS.matches("FAILED:[A-Z_]+:[A-Za-z0-9_$]+"));
+    }
+    @Test void shaIsStableAndFollowsTheBytes(@TempDir Path dir)throws Exception{
+        Path a=dir.resolve("a.jar"),b=dir.resolve("b.jar");Files.writeString(a,"one");Files.writeString(b,"one");
+        assertEquals(EntryAgent.sha256(a),EntryAgent.sha256(b));assertEquals(64,EntryAgent.sha256(a).length());
+        Files.writeString(b,"two");assertNotEquals(EntryAgent.sha256(a),EntryAgent.sha256(b));
+    }
+    @Test void builtJarCarriesTheAgentVersionTheCodeHas(){
+        assertEquals(EntryAgent.AGENT_VERSION,EntryAgent.jarAgentVersion(Path.of(System.getProperty("handoff.bridgeDevJar"))));
+    }
+    @Test void jarWithoutTheAttributeCountsAsOlder(@TempDir Path dir)throws Exception{
+        Path plain=dir.resolve("plain.jar");
+        try(var out=new java.util.jar.JarOutputStream(Files.newOutputStream(plain))){out.putNextEntry(new java.util.zip.ZipEntry("x.txt"));out.closeEntry();}
+        assertEquals(-1,EntryAgent.jarAgentVersion(plain));assertEquals(-1,EntryAgent.jarAgentVersion(dir.resolve("missing.jar")));
     }
 }

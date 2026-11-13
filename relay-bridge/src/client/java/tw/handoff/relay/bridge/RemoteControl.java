@@ -41,6 +41,8 @@ final class RemoteControl {
   release();lease.grant(peer,true);if(host.lab==null)driver.begin();remote=true;lastInput=System.nanoTime();announce();
  }
  void release(){if(walk!=null)walk.abort("control released");NativePeer p=lease.owner();if(p!=null)lease.release(p);driver.end();remote=false;if(p!=null)announce();}
+ /** Stop path (game thread): ends the idle walk and any viewer control, then removes the window callbacks. */
+ void shutdown(){try{release();}finally{driver.dispose();}}
  private void announce(){for(NativePeer p:host.peers())if(p.lifecycle.active())p.send(message(ControlWire.PREFIX+"R:"+(lease.ownedBy(p)?lease.epoch():0)));}
  boolean remoteOwns(){return remote;}
  static ClientboundCustomPayloadPacket message(String value){return new ClientboundCustomPayloadPacket(new BrandPayload(value));}
