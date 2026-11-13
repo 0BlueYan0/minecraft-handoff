@@ -6,14 +6,22 @@ setlocal EnableExtensions DisableDelayedExpansion
 rem cmd reads a batch file while it runs. This file is replaced during the update, so the real work
 rem runs from a temporary copy and this original is never read again after the copy starts.
 set "SELF=%TEMP%\handoff-updater-%RANDOM%%RANDOM%.cmd"
+rem Started by hand (double-click, or no argument): update the package this file sits in, say when nothing
+rem is newer, and keep the window open. Without this a direct run exited at once and printed nothing.
+if not defined HANDOFF_UPDATER_COPY (
+  set "DIRECT="
+  set "ARGROOT=%~1"
+  if "%~1"=="" (set "DIRECT=1" & set "ARGROOT=%~dp0..")
+)
 if not defined HANDOFF_UPDATER_COPY (
   copy /y "%~f0" "%SELF%" >nul 2>&1 && (
     set "HANDOFF_UPDATER_COPY=1"
-    call "%SELF%" %*
-    if errorlevel 100 (del "%SELF%" >nul 2>&1 & exit /b 100)
-    del "%SELF%" >nul 2>&1 & exit /b 0
+    call "%SELF%" "%ARGROOT%"
+    if errorlevel 100 (del "%SELF%" >nul 2>&1 & (if defined DIRECT pause) & exit /b 100)
+    del "%SELF%" >nul 2>&1 & (if defined DIRECT pause) & exit /b 0
   )
   echo Update skipped: could not prepare the updater.
+  if defined DIRECT pause
   exit /b 0
 )
 
@@ -52,7 +60,10 @@ call :key "%LOCAL%" LKEY
 call :key "%REMOTE%" RKEY
 if not defined LKEY (call :fail "installed version is too long to compare" & goto done)
 if not defined RKEY (call :fail "latest version is too long to compare" & goto done)
-if not "%RKEY%" gtr "%LKEY%" goto done
+if not "%RKEY%" gtr "%LKEY%" (
+  if defined DIRECT echo Minecraft Handoff %LOCAL% is already the latest version.
+  goto done
+)
 
 echo Updating Minecraft Handoff %LOCAL% to %REMOTE%
 echo [1/5] Downloading the checksum list ...
@@ -116,6 +127,8 @@ exit /b 0
 
 :fail
 echo Update skipped: %~1. Continuing with %LOCAL%.
+rem curl and tar write their reason here; GeForce NOW only showed the line above, which did not say why.
+if exist "%WORK%\err.txt" for %%F in ("%WORK%\err.txt") do if %%~zF gtr 0 type "%WORK%\err.txt"
 exit /b 0
 
 :swapboth

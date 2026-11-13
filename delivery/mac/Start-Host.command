@@ -80,14 +80,14 @@ update_package() {
 
 apply_update() {
   local base="$1" remote got want have d
-  curl -fsSL --max-redirs 5 --proto-redir =https --connect-timeout 15 --max-time 15 -o "$WORK/VERSION" "$base/VERSION" 2>/dev/null \
+  curl -fsSL --max-redirs 5 --proto-redir =https --connect-timeout 15 --max-time 15 -o "$WORK/VERSION" "$base/VERSION" \
     || { update_note "could not read the latest version"; return 0; }
   remote="$(first_line "$WORK/VERSION")"
   version_ok "$remote" || { update_note "the latest version is not a version number"; return 0; }
   version_newer "$remote" "$LOCAL_VERSION" || return 0
   echo "Updating Minecraft Handoff $LOCAL_VERSION to $remote"
   echo "[1/5] Downloading the checksum list ..."
-  curl -fsSL --max-redirs 5 --proto-redir =https --connect-timeout 15 --max-time 15 -o "$WORK/SHA256SUMS" "$base/SHA256SUMS" 2>/dev/null \
+  curl -fsSL --max-redirs 5 --proto-redir =https --connect-timeout 15 --max-time 15 -o "$WORK/SHA256SUMS" "$base/SHA256SUMS" \
     || { update_note "could not download SHA256SUMS"; return 0; }
   echo "[2/5] Downloading minecraft-handoff.zip ..."
   # No total time limit for the large zip; the download stops after 15 seconds without progress. -# draws a progress bar.
