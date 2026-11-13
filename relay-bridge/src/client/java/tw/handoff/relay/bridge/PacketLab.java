@@ -50,11 +50,20 @@ final class PacketLab {
    public void channelRead(ChannelHandlerContext ctx,Object msg)throws Exception{
     byte[] copy=null;if(msg instanceof ByteBuf b&&b.readableBytes()<=8*1024*1024){copy=new byte[b.readableBytes()];b.getBytes(b.readerIndex(),copy);}
     ctx.fireChannelRead(msg);
-    if(copy!=null)try{mirror.accept(copy);}catch(RuntimeException|LinkageError ignored){for(NativePeer peer:host.peers())peer.close("Lab wire state unavailable");}
+    if(copy!=null)try{diag.received(names.get(OpaqueFrames.readVarInt(copy,new int[]{0})),PacketLab.this::livePeer);mirror.accept(copy);}catch(RuntimeException|LinkageError ignored){for(NativePeer peer:host.peers())peer.close("Lab wire state unavailable");}
    }
   })).syncUninterruptibly();
  }
  static final String HANDLER="handoff_opaque_lab";
+ final ChunkDiag diag=new ChunkDiag();
+ private boolean livePeer(){for(NativePeer peer:host.peers())if(peer.live)return true;return false;}
+ /** Game thread, every tick; prints one [handoff-diag] line every 5 seconds while a viewer is connected. */
+ void diagTick(){
+  var peers=host.peers();if(peers.isEmpty()){diag.reset();return;}
+  var p=host.minecraft().player;if(p==null)return;
+  int live=0;for(NativePeer n:peers)if(n.live)live++;
+  diag.tick(p.chunkPosition().x,p.chunkPosition().z,live);
+ }
  /** Takes the wire handler install added out of the original pipeline. */
  void uninstall(){HostBridge.removeHandler(channel,HANDLER);}
  void replay(NativePeer peer){replay(peer::sendFrames);}
@@ -70,6 +79,7 @@ final class PacketLab {
   byte[] bytes=Base64.getDecoder().decode(encoded);if(bytes.length>16000)throw new IllegalArgumentException("Lab frame too large");
   Packet<?> packet=decodeFrame(bytes,registries);
   if(!admit(bytes,packet))return;
+  if(packet instanceof ServerboundMovePlayerPacket)diag.moves.incrementAndGet();
   if(packet instanceof ServerboundMovePlayerPacket move&&localPlayer.get()!=null){var p=localPlayer.get();p.setPos(move.getX(p.getX()),move.getY(p.getY()),move.getZ(p.getZ()));p.setYRot(move.getYRot(p.getYRot()));p.setXRot(move.getXRot(p.getXRot()));}
   channel.writeAndFlush(Unpooled.wrappedBuffer(bytes));
  }

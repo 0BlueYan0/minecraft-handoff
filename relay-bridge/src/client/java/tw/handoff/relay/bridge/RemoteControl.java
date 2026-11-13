@@ -83,6 +83,7 @@ final class RemoteControl {
  }
  void tick(){
   for(NativePeer peer:host.peers())for(String text:peer.inputs.drain())dispatch(peer,text);
+  if(host.lab!=null)host.lab.diagTick();
   if(mc.player==null||mc.level==null||mc.getConnection()==null){if(walk!=null)walk.tick();release();return;}
   NativePeer owner=lease.owner();if(owner!=null&&(owner.closed||!owner.lifecycle.active()||System.nanoTime()-lastInput>2_000_000_000L))release();
   else if(owner!=null&&System.nanoTime()-lastInput>300_000_000L)driver.clear();

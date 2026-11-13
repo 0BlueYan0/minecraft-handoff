@@ -49,6 +49,7 @@ public final class ViewerClient implements ClientModInitializer {
         }catch(RuntimeException invalid){epoch=0;}
     });}
     private static void tick(Minecraft mc){if((!THIN&&!LAB)||mc.player==null||mc.getConnection()==null)return;
+        ViewerDiag.tick(mc,epoch);
         long w=mc.getWindow().getWindow();boolean take=GLFW.glfwGetKey(w,GLFW.GLFW_KEY_F6)==GLFW.GLFW_PRESS,release=GLFW.glfwGetKey(w,GLFW.GLFW_KEY_F7)==GLFW.GLFW_PRESS;
         if(take&&!takeDown)send(ControlWire.PREFIX+"TAKE");if(release&&!releaseDown)send(ControlWire.PREFIX+"RELEASE");takeDown=take;releaseDown=release;
         if(epoch<=0)return;
@@ -71,6 +72,7 @@ public final class ViewerClient implements ClientModInitializer {
             return true;
         }
         byte[] bytes=encode(mc,packet);if(bytes==null)return true;
+        if(packet instanceof net.minecraft.network.protocol.game.ServerboundMovePlayerPacket)ViewerDiag.MOVES.incrementAndGet();
         String value=ControlWire.action(epoch,++sequence,Base64.getEncoder().encodeToString(bytes)).encode();send(LAB?value.replaceFirst("HANDOFF2:A:","HANDOFF2:G:"):value);
         return true;
     }
