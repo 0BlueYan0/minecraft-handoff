@@ -62,6 +62,23 @@ class GenericModeTest {
   assertEquals(1,written(payload("saojob:skills")));
   assertEquals(1,written(new net.minecraft.network.protocol.game.ServerboundSwingPacket(net.minecraft.world.InteractionHand.MAIN_HAND)));
  }
+ static byte[] mux(String sub,String json){
+  int id=tw.handoff.relay.core.OpaqueFrames.readVarInt(encode(payload("x:y")),new int[]{0});
+  var data=new java.io.ByteArrayOutputStream();byte[] name=sub.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+  data.write(name.length);data.writeBytes(name);data.writeBytes(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+  return tw.handoff.relay.core.OpaqueFrames.payload(id,"saocore:mux",data.toByteArray());
+ }
+ static int translated(byte[] frame){
+  var channel=new io.netty.channel.embedded.EmbeddedChannel();
+  new PacketLab(null,channel,PacketLab.Mode.PRODUCTION).forwardTranslate(java.util.Base64.getEncoder().encodeToString(frame),net.minecraft.core.RegistryAccess.EMPTY.freeze());
+  int count=channel.outboundMessages().size();channel.finishAndReleaseAll();return count;
+ }
+ @Test void viewerWithoutControlOnlyGetsTranslationRequestsThrough(){
+  assertEquals(1,translated(mux("saocore:translate","{\"op\":\"SYNC\",\"data\":{\"p\":2,\"lang\":\"zh_tw\",\"v\":\"\"}}")));
+  assertEquals(0,translated(mux("saogui:main","{\"op\":\"SYNC\",\"data\":{}}")));
+  assertEquals(0,translated(mux("saocore:translate","{\"op\":\"BUY\",\"data\":{}}")));
+  assertEquals(0,translated(encode(new net.minecraft.network.protocol.game.ServerboundSwingPacket(net.minecraft.world.InteractionHand.MAIN_HAND))));
+ }
  @Test void chatAndLauncherStillBlocked(){
   assertFalse(admitted(new ServerboundChatCommandPacket("say hi")));
   assertFalse(admitted(payload("launcher:auth")));

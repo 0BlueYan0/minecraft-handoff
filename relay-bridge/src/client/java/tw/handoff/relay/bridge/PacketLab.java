@@ -73,6 +73,14 @@ final class PacketLab {
   if(packet instanceof ServerboundMovePlayerPacket move&&localPlayer.get()!=null){var p=localPlayer.get();p.setPos(move.getX(p.getX()),move.getY(p.getY()),move.getZ(p.getZ()));p.setYRot(move.getYRot(p.getYRot()));p.setXRot(move.getXRot(p.getXRot()));}
   channel.writeAndFlush(Unpooled.wrappedBuffer(bytes));
  }
+ void forwardTranslate(String encoded){forwardTranslate(encoded,host.registries());}
+ /** Only SAOUI translation table requests pass; anything else from a viewer without control is dropped. */
+ void forwardTranslate(String encoded,net.minecraft.core.RegistryAccess.Frozen registries){
+  byte[] bytes=Base64.getDecoder().decode(encoded);
+  if(!SaoTranslateRequest.allowsFrame(bytes))return;
+  if(!(decodeFrame(bytes,registries) instanceof ServerboundCustomPayloadPacket))return;
+  channel.writeAndFlush(Unpooled.wrappedBuffer(bytes));
+ }
  static Packet<?> decodeFrame(byte[] bytes,net.minecraft.core.RegistryAccess.Frozen registries){
   var buffer=new RegistryFriendlyByteBuf(Unpooled.wrappedBuffer(bytes),registries);
   try{Packet<?> packet=GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(registries)).codec().decode(buffer);if(buffer.isReadable())throw new IllegalArgumentException("Trailing bytes in game frame");return packet;}finally{buffer.release();}

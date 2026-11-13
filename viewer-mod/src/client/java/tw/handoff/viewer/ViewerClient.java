@@ -63,10 +63,22 @@ public final class ViewerClient implements ClientModInitializer {
             if(Minecraft.getInstance().getConnection()==null)return false;
             String name=packet.type().id().getPath();if(java.util.Set.of("keep_alive","pong","accept_teleportation","player_loaded","chunk_batch_received","client_tick_end","chat_ack","client_information").contains(name)||name.contains("cookie"))return false;
         }else if(!THIN||!ACTIONS.contains(packet.type().id().getPath()))return false;
-        Minecraft mc=Minecraft.getInstance();if(epoch<=0||mc.getConnection()==null)return true;
+        Minecraft mc=Minecraft.getInstance();if(mc.getConnection()==null)return true;
+        if(epoch<=0){
+            // SAOUI asks for its translation table right after JOIN, before anyone takes control.
+            // Any other mod's payload goes through encode here too; one that fails to encode is still just swallowed.
+            if(LAB&&packet instanceof ServerboundCustomPayloadPacket)try{byte[] bytes=encode(mc,packet);if(bytes!=null&&tw.handoff.relay.core.SaoTranslateRequest.allowsFrame(bytes))send(ControlWire.language(Base64.getEncoder().encodeToString(bytes)));}catch(RuntimeException unencodable){}
+            return true;
+        }
+        byte[] bytes=encode(mc,packet);if(bytes==null)return true;
+        String value=ControlWire.action(epoch,++sequence,Base64.getEncoder().encodeToString(bytes)).encode();send(LAB?value.replaceFirst("HANDOFF2:A:","HANDOFF2:G:"):value);
+        return true;
+    }
+    /** The serverbound wire frame, or null when it is larger than one control message carries. */
+    @SuppressWarnings("unchecked") private static byte[] encode(Minecraft mc,Packet<?> packet){
         var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),mc.getConnection().registryAccess());
         try{((net.minecraft.network.codec.StreamCodec)GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(mc.getConnection().registryAccess())).codec()).encode(buffer,packet);
-            if(buffer.readableBytes()>16000)return true;byte[] bytes=new byte[buffer.readableBytes()];buffer.readBytes(bytes);String value=ControlWire.action(epoch,++sequence,Base64.getEncoder().encodeToString(bytes)).encode();send(LAB?value.replaceFirst("HANDOFF2:A:","HANDOFF2:G:"):value);
-        }finally{buffer.release();}return true;
+            if(buffer.readableBytes()>16000)return null;byte[] bytes=new byte[buffer.readableBytes()];buffer.readBytes(bytes);return bytes;
+        }finally{buffer.release();}
     }
 }

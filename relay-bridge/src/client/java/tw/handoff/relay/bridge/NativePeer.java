@@ -40,6 +40,9 @@ final class NativePeer implements InvocationHandler {
     volatile ConnectionProtocol protocol=ConnectionProtocol.HANDSHAKING;
     volatile boolean live,closed;
     long created=System.nanoTime(),lastKeepalive=created,keepalive;
+    private long languageWindow;private int languageCount;
+    /** SAOUI asks at most every 10 s and flushes up to two MISSING per pass; 5 per 10 s covers that and caps a misbehaving viewer. */
+    boolean allowLanguageRequest(long now){if(now-languageWindow>10_000_000_000L){languageWindow=now;languageCount=0;}return ++languageCount<=5;}
     NativePeer(HostBridge host,Connection connection,Channel channel){
         this.host=host;this.connection=connection;this.channel=channel;
         listener=Proxy.newProxyInstance(ServerGamePacketListener.class.getClassLoader(),new Class<?>[]{ServerHandshakePacketListener.class,ServerLoginPacketListener.class,ServerConfigurationPacketListener.class,ServerGamePacketListener.class},this);

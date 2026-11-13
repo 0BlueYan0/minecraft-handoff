@@ -57,6 +57,8 @@ final class RemoteControl {
    if(text.equals(ControlWire.PREFIX+"TAKE"))return; // No join flow ran for this viewer, so there is no state to hand over.
    if(text.equals(ControlWire.PREFIX+"RELEASE")){if(lease.ownedBy(peer))release();return;}
    if(text.startsWith(ControlWire.PREFIX+"I:")){ControlFrame f=ControlFrame.decode(text);if(lease.accept(peer,f.epoch(),f.sequence())){lastInput=System.nanoTime();driver.frame(f);}return;}
+   // A viewer that has not taken control may still ask SAOUI's server for its translation table.
+   if(text.startsWith(ControlWire.PREFIX+"L:")){if(host.lab!=null&&peer.live&&peer.allowLanguageRequest(System.nanoTime()))host.lab.forwardTranslate(ControlWire.parseLanguage(text));return;}
    if(host.lab!=null&&text.startsWith(ControlWire.PREFIX+"G:")){var a=ControlWire.parseAction(text.replaceFirst("HANDOFF2:G:","HANDOFF2:A:"));if(lease.accept(peer,a.epoch(),a.sequence())){lastInput=System.nanoTime();host.lab.forward(a.data());}return;}
    if(text.startsWith(ControlWire.PREFIX+"A:")){var a=ControlWire.parseAction(text);if(lease.accept(peer,a.epoch(),a.sequence())){lastInput=System.nanoTime();action(a.data());}}
   }catch(RuntimeException|LinkageError bad){peer.close("Invalid control input");}

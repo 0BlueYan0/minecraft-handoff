@@ -24,6 +24,12 @@ public final class ControlWire {
  public static String parseMissing(String s){return piece(body(s,"M:",100));}
  public static String failed(String piece){return pieceMessage("N:",piece);}
  public static String parseFailed(String s){return piece(body(s,"N:",100));}
+ /** viewer 觀察中送的 SAOUI 翻譯表請求，內容是 base64 的 serverbound frame，不帶 epoch，常駐端另外用 SaoTranslateRequest 檢查。 */
+ public static String language(String data){
+  if(data==null||data.isEmpty()||data.length()>22000||!data.matches("[A-Za-z0-9+/]*={0,2}"))throw new IllegalArgumentException("Invalid control envelope");
+  return PREFIX+"L:"+data;
+ }
+ public static String parseLanguage(String s){return language(body(s,"L:",22100)).substring((PREFIX+"L:").length());}
  public static String ack(){return PREFIX+"K";}
  public static boolean isAck(String s){return (PREFIX+"K").equals(s);}
  private static String pieceMessage(String tag,String piece){return PREFIX+tag+piece(piece);}
