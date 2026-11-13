@@ -57,6 +57,7 @@ public final class ViewerMain {
             child.environment().remove("JAVA_TOOL_OPTIONS");child.environment().remove("JDK_JAVA_OPTIONS");child.environment().remove("_JAVA_OPTIONS");
             child.redirectErrorStream(true).redirectOutput(ViewerSandbox.output(viewer,viewer.resolve("launch-console.log")).toFile());
             Process process=child.start();System.out.println("Viewer PID "+process.pid()+" started. Minecraft destination is restricted to loopback port "+port+".");
+            LaunchProgress.start(ViewerSandbox.output(viewer,viewer.resolve("launch-console.log")),process::isAlive,System.out,10_000L,500L);
             int result=process.waitFor();System.out.println("Viewer exited: "+result);return result;
         }
     }
