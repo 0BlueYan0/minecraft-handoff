@@ -54,13 +54,16 @@ if not defined LKEY (call :fail "installed version is too long to compare" & got
 if not defined RKEY (call :fail "latest version is too long to compare" & goto done)
 if not "%RKEY%" gtr "%LKEY%" goto done
 
-echo Updating Minecraft Handoff %LOCAL% to %REMOTE% ...
+echo Updating Minecraft Handoff %LOCAL% to %REMOTE%
+echo [1/5] Downloading the checksum list ...
 "%SYS%\curl.exe" -fsS -L --max-redirs 5 --proto-redir =https --connect-timeout 15 --max-time 15 -o "%WORK%\SHA256SUMS" "%BASE%/SHA256SUMS" <nul 2>"%WORK%\err.txt"
 if errorlevel 1 (call :fail "could not download SHA256SUMS" & goto done)
-rem The zip is large: no total time limit, but the download stops when it stalls for 15 seconds.
-"%SYS%\curl.exe" -fsS -L --max-redirs 5 --proto-redir =https --connect-timeout 15 --speed-limit 1024 --speed-time 15 -o "%WORK%\minecraft-handoff.zip" "%BASE%/minecraft-handoff.zip" <nul 2>"%WORK%\err.txt"
+echo [2/5] Downloading minecraft-handoff.zip ...
+rem The zip is large: no total time limit, but the download stops when it stalls for 15 seconds. -# draws a progress bar.
+"%SYS%\curl.exe" -fS -# -L --max-redirs 5 --proto-redir =https --connect-timeout 15 --speed-limit 1024 --speed-time 15 -o "%WORK%\minecraft-handoff.zip" "%BASE%/minecraft-handoff.zip" <nul
 if errorlevel 1 (call :fail "could not download minecraft-handoff.zip" & goto done)
 
+echo [3/5] Checking the SHA-256 checksum ...
 rem findstr only matches line ends in CRLF files, so the hash goes through a file that cmd itself writes.
 set "WANT="
 set "SUMLINE="
@@ -83,6 +86,7 @@ if not defined GOT (call :fail "could not compute the checksum" & goto done)
 set "GOT=%GOT: =%"
 if /i not "%GOT%"=="%WANT%" (call :fail "checksum mismatch, download discarded" & goto done)
 
+echo [4/5] Unpacking ...
 mkdir "%WORK%\x" >nul 2>&1
 "%SYS%\tar.exe" -xf "%WORK%\minecraft-handoff.zip" -C "%WORK%\x" <nul 2>"%WORK%\err.txt"
 if errorlevel 1 (call :fail "could not unpack the download" & goto done)
@@ -94,6 +98,7 @@ if not exist "%WORK%\x\mac\" (call :fail "the download has no mac folder" & goto
 if not exist "%WORK%\x\windows\Start-Viewer.cmd" (call :fail "the download has no Start-Viewer.cmd" & goto done)
 if not exist "%WORK%\x\README-*.md" (call :fail "the download has no guide" & goto done)
 
+echo [5/5] Replacing the installed files ...
 rem Swap in order lib and mac together, guide, windows, VERSION. VERSION goes last so a half-finished update is retried next start.
 call :swapboth || (call :fail "could not replace lib and mac, they may be in use" & goto done)
 copy /y "%WORK%\x\README-*.md" "%ROOT%\" >nul || (call :fail "could not replace the guide" & goto done)

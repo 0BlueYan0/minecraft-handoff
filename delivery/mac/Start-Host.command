@@ -85,23 +85,28 @@ apply_update() {
   remote="$(first_line "$WORK/VERSION")"
   version_ok "$remote" || { update_note "the latest version is not a version number"; return 0; }
   version_newer "$remote" "$LOCAL_VERSION" || return 0
-  echo "Updating Minecraft Handoff $LOCAL_VERSION to $remote ..."
+  echo "Updating Minecraft Handoff $LOCAL_VERSION to $remote"
+  echo "[1/5] Downloading the checksum list ..."
   curl -fsSL --max-redirs 5 --proto-redir =https --connect-timeout 15 --max-time 15 -o "$WORK/SHA256SUMS" "$base/SHA256SUMS" 2>/dev/null \
     || { update_note "could not download SHA256SUMS"; return 0; }
-  # No total time limit for the large zip; the download stops after 15 seconds without progress.
-  curl -fsSL --max-redirs 5 --proto-redir =https --connect-timeout 15 --speed-limit 1024 --speed-time 15 -o "$WORK/minecraft-handoff.zip" "$base/minecraft-handoff.zip" 2>/dev/null \
+  echo "[2/5] Downloading minecraft-handoff.zip ..."
+  # No total time limit for the large zip; the download stops after 15 seconds without progress. -# draws a progress bar.
+  curl -fS -# -L --max-redirs 5 --proto-redir =https --connect-timeout 15 --speed-limit 1024 --speed-time 15 -o "$WORK/minecraft-handoff.zip" "$base/minecraft-handoff.zip" \
     || { update_note "could not download minecraft-handoff.zip"; return 0; }
+  echo "[3/5] Checking the SHA-256 checksum ..."
   want="$(awk '$2=="minecraft-handoff.zip"{print tolower($1); exit}' "$WORK/SHA256SUMS" 2>/dev/null || true)"
   printf '%s\n' "$want" | grep -Eq '^[0-9a-f]{64}$' || { update_note "SHA256SUMS has no valid entry for the zip"; return 0; }
   got="$(shasum -a 256 "$WORK/minecraft-handoff.zip" 2>/dev/null | awk '{print tolower($1)}' || true)"
   [ -n "$got" ] || { update_note "could not compute the checksum"; return 0; }
   [ "$got" = "$want" ] || { update_note "checksum mismatch, download discarded"; return 0; }
+  echo "[4/5] Unpacking ..."
   mkdir "$WORK/x" && unzip -q "$WORK/minecraft-handoff.zip" -d "$WORK/x" 2>/dev/null \
     || { update_note "could not unpack the download"; return 0; }
   have="$(first_line "$WORK/x/VERSION")"
   [ "$have" = "$remote" ] || { update_note "the download is version ${have:-unknown}, not $remote"; return 0; }
   [ -d "$WORK/x/lib" ] && [ -d "$WORK/x/mac" ] && [ -d "$WORK/x/windows" ] && [ -f "$WORK/x/mac/Start-Host.command" ] \
     || { update_note "the download is missing folders"; return 0; }
+  echo "[5/5] Replacing the installed files ..."
   # lib and mac together, windows, guide, then VERSION last so a half-finished update is retried next start.
   swap_both || { update_note "could not replace lib and mac"; return 0; }
   swap_dir windows || { update_note "could not replace windows"; return 0; }
