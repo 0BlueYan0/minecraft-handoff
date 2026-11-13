@@ -9,10 +9,12 @@ import net.minecraft.world.level.GameType;
 
 final class SnapshotPackets {
     private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger("minecraft-handoff-relay");
+    static int radius(int renderDistance){return Math.max(2,Math.min(32,renderDistance));}
     static void send(HostBridge host,NativePeer peer)throws ReflectiveOperationException{
         var mc=host.minecraft();var player=mc.player;var level=mc.level;
         if(player==null||level==null)throw new IllegalStateException("Host world changed");
-        int radius=4;
+        // The server sends chunks out to the host's render distance plus one; a viewer told a smaller radius drops them.
+        int radius=radius(mc.options.getEffectiveRenderDistance());
         CommonPlayerSpawnInfo spawn=new CommonPlayerSpawnInfo(level.dimensionTypeRegistration(),level.dimension(),0,
             mc.gameMode.getPlayerMode(),mc.gameMode.getPreviousPlayerMode(),level.isDebug(),level.getLevelData().getHorizonHeight(level)==level.getMinY(),player.getLastDeathLocation(),player.getPortalCooldown(),level.getSeaLevel());
         peer.send(new ClientboundLoginPacket(player.getId(),level.getLevelData().isHardcore(),mc.getConnection().levels(),1,radius,radius,false,true,false,spawn,false));
@@ -33,8 +35,9 @@ final class SnapshotPackets {
         peer.send(new ClientboundCommandsPacket(commands.root()));
         peer.send(ClientboundChunkBatchStartPacket.INSTANCE);
         int count=0;long start=System.nanoTime();
-        for(int x=-radius;x<=radius;x++)for(int z=-radius;z<=radius;z++){
-            if(System.nanoTime()-start>1_000_000_000L)throw new IllegalStateException("Snapshot exceeded time budget");
+        chunks:for(int x=-radius;x<=radius;x++)for(int z=-radius;z<=radius;z++){
+            // Past the budget, send what is built instead of failing the join; the missing ones stay empty until the player moves.
+            if(System.nanoTime()-start>3_000_000_000L){if(count>0)break chunks;throw new IllegalStateException("Snapshot exceeded time budget");}
             var chunk=level.getChunkSource().getChunk(player.chunkPosition().x+x,player.chunkPosition().z+z,ChunkStatus.FULL,false);
             if(chunk!=null){peer.send(new ClientboundLevelChunkWithLightPacket(chunk,level.getChunkSource().getLightEngine(),null,null));count++;}
         }
