@@ -68,7 +68,7 @@ public final class HostBridge {
                     else try{for(byte[] frame:host.codec().freeze(custom))host.table.observe(frame);}catch(RuntimeException|LinkageError unsupported){host.table.markSkipped();report("Replay table could not record a payload",unsupported,true);}
                 }
                 if(host.lab==null&&message instanceof Packet<?> packet&&host.peers.stream().anyMatch(peer->peer.live)&&MirrorRules.forward(packet)){
-                    try{frames=host.codec().freeze(packet);}catch(RuntimeException|LinkageError unsupported){LOG.debug("Relay omitted unsupported packet type {}",packet.type().id());}
+                    try{Packet<?> shown=ChatForViewer.rewrite(packet);if(shown!=null)frames=host.codec().freeze(shown);}catch(RuntimeException|LinkageError unsupported){LOG.debug("Relay omitted unsupported packet type {}",packet.type().id());}
                 }
                 context.fireChannelRead(message);
                 if(frames!=null)for(NativePeer peer:host.peers)if(peer.live)try{peer.sendFrames(frames);}catch(RuntimeException|LinkageError ignored){peer.close("Relay stream unavailable");}

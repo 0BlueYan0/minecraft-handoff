@@ -40,7 +40,9 @@ final class PacketLab {
  void install(){
   byte[] brand=host.codec().freeze(new ClientboundCustomPayloadPacket(new BrandPayload("lab-wire-id"))).getFirst();int id=OpaqueFrames.readVarInt(brand,new int[]{0});
   Map<Integer,String> names=new HashMap<>();GameProtocols.CLIENTBOUND_TEMPLATE.listPackets((type,number)->names.put(number,type.id().getPath()));
-  java.util.function.Consumer<byte[]> sink=frame->{for(NativePeer peer:host.peers())if(peer.live)try{peer.sendFrames(List.of(frame));}catch(RuntimeException|LinkageError failed){peer.close("Lab viewer stream failed");}};
+  java.util.function.Consumer<byte[]> sink=frame->{
+   List<byte[]> out=ChatForViewer.rewrite(frame,names.get(OpaqueFrames.readVarInt(frame,new int[]{0})),host.codec());if(out.isEmpty())return;
+   for(NativePeer peer:host.peers())if(peer.live)try{peer.sendFrames(out);}catch(RuntimeException|LinkageError failed){peer.close("Lab viewer stream failed");}};
   // OrderedWireMirror requires a journal; PRODUCTION has none, so it applies the same filters inline.
   java.util.function.Consumer<byte[]> mirror=history!=null?new OrderedWireMirror(id,number->MirrorRules.wire(names.get(number)),history,sink)::receive:frame->{
    int number=OpaqueFrames.readVarInt(frame,new int[]{0});if(!MirrorRules.wire(names.get(number)))return;
