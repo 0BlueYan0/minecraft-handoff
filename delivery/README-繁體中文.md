@@ -85,7 +85,7 @@ Mac 常駐端沒人操作時，每 5 分鐘會自己在遊戲裡前、右、後�
    ```
    > Mac 掛著的時候，Windows 不要打開 Triggers Client 啟動遊戲。兩次在 Windows 用同一個帳號從 Triggers Client 開遊戲之後，Mac 在 10 分鐘內被判定「啟動器工作階段已過期或無效」而斷線。操作端只讀 Triggers 資料夾裡已經下載好的檔案，不需要開 Triggers Client。
 3. 程式先檢查 Mac 憑證與配對權限，再啟動獨立的 Minecraft。視窗會顯示目前在做什麼：
-   - 第一次會複製本機模組與資源包，顯示 `Copying game files: 已複製/總數 (MB)`，約 1 GB。
+   - 第一次會複製本機模組、資源包與光影包，顯示 `Copying game files: 已複製/總數 (MB)`，約 1 GB。
    - 之後只檢查有沒有變，顯示 `Checking game files: 數量`，再顯示 `Game files up to date`。
    - Minecraft 載入期間每 10 秒顯示一次 `Minecraft loading... 秒數`，大約要 2 到 4 分鐘。
 4. 世界載入完成後會自動嘗試接管。視窗標題 `CONTROLLER` 表示能操作；`SPECTATOR` 表示觀察。按 **F6** 接管、**F7** 釋放。筆電可能需要搭配 Fn。
@@ -104,7 +104,7 @@ Mac 常駐端沒人操作時，每 5 分鐘會自己在遊戲裡前、右、後�
   -Java 'C:\你的Java21\bin\java.exe'
 ```
 
-操作端資料預設在 `%LOCALAPPDATA%\MinecraftHandoff\viewer`。它使用獨立 options、config、logs；不複製原本帳戶資料、cookie、遊戲存檔或舊 launcher token。原整合包不會被改寫，額外模組也不放進啟動器管理的 mods。`-Vanilla` 僅供本機原版測試世界，不能拿來連模組 SAO 服。
+操作端資料預設在 `%LOCALAPPDATA%\MinecraftHandoff\viewer`。它使用獨立 options、config、logs，光影設定第一次沿用原整合包選的光影包；不複製原本帳戶資料、cookie、遊戲存檔或舊 launcher token。原整合包不會被改寫，額外模組也不放進啟動器管理的 mods。`-Vanilla` 僅供本機原版測試世界，不能拿來連模組 SAO 服。
 
 ## 接力與停止
 

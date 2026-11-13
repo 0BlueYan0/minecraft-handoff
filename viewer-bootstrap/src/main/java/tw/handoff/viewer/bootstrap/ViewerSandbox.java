@@ -66,7 +66,7 @@ final class ViewerSandbox {
             }
         }
         if(!vanilla){
-            if(resourcePacks)collectTree(source.resolve("resourcepacks"),out.resolve("resourcepacks"),false,plan);
+            if(resourcePacks){collectTree(source.resolve("resourcepacks"),out.resolve("resourcepacks"),false,plan);collectTree(source.resolve("shaderpacks"),out.resolve("shaderpacks"),false,plan);}
             collectTree(source.resolve("mods/mcef-libraries"),out.resolve("mods/mcef-libraries"),true,plan);
         }
         java.util.List<Item> pending=plan.pending;long totalBytes=plan.pendingBytes;
@@ -76,8 +76,14 @@ final class ViewerSandbox {
         try(var old=Files.list(out.resolve("mods"))){for(Path file:old.filter(p->Files.isRegularFile(p,LinkOption.NOFOLLOW_LINKS)&&p.getFileName().toString().endsWith(".jar")).toList())if(!expected.contains(file.getFileName().toString()))Files.delete(output(out,file));}
         Path options=output(out,out.resolve("options.txt"));
         if(!Files.exists(options))Files.writeString(options,"lang:zh_tw\nrenderDistance:6\nsimulationDistance:5\nmaxFps:60\nenableVsync:false\nresourcePacks:"+(vanilla||!resourcePacks?"[\"vanilla\",\"fabric\"]":"[\"vanilla\",\"fabric\",\"file/sao\"]")+"\n");
-        Path iris=output(out,out.resolve("config/iris.properties"));if(!Files.exists(iris))Files.writeString(iris,"enableShaders=false\n");
+        // Start with the instance's shader choice; once the viewer's own file differs from the first-run default, it is the user's.
+        Path iris=output(out,out.resolve("config/iris.properties")),sourceIris=source.resolve("config/iris.properties");
+        if(!Files.exists(iris,LinkOption.NOFOLLOW_LINKS)||java.util.Arrays.equals(Files.readAllBytes(iris),IRIS_DEFAULT.getBytes(java.nio.charset.StandardCharsets.UTF_8))){
+            if(!vanilla&&resourcePacks&&Files.isRegularFile(sourceIris,LinkOption.NOFOLLOW_LINKS))Files.copy(sourceIris,iris,java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            else if(!Files.exists(iris,LinkOption.NOFOLLOW_LINKS))Files.writeString(iris,IRIS_DEFAULT);
+        }
     }
+    static final String IRIS_DEFAULT="enableShaders=false\n";
     private static boolean isFabricApi(Path jar)throws IOException{
         try(ZipFile zip=new ZipFile(jar.toFile())){
             var entry=zip.getEntry("fabric.mod.json");if(entry==null)return false;

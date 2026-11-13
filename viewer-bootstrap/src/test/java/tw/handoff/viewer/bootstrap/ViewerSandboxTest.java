@@ -41,6 +41,28 @@ class ViewerSandboxTest {
         assertEquals("user settings",Files.readString(viewer.resolve("options.txt")));
         assertEquals("code",Files.readString(source.resolve("mods/mod.jar")));
     }
+    @Test void copiesShaderPacksAndStartsWithTheInstanceShaderChoice()throws Exception{
+        Path install=Files.createDirectory(temp.resolve("install")),source=install.resolve("instances/Sword Art Online"),viewer=temp.resolve("viewer");
+        Files.createDirectories(source.resolve("mods"));Files.createDirectories(source.resolve("shaderpacks"));Files.writeString(source.resolve("shaderpacks/pack.zip"),"shader");
+        Files.createDirectories(source.resolve("config"));Files.writeString(source.resolve("config/iris.properties"),"enableShaders=true\nshaderPack=pack.zip\n");
+        // An older viewer wrote the first-run default; it is replaced once.
+        Files.createDirectories(viewer.resolve("config"));Files.writeString(viewer.resolve(".handoff-viewer"),"MinecraftHandoffViewer:1");Files.writeString(viewer.resolve("config/iris.properties"),ViewerSandbox.IRIS_DEFAULT);
+        ViewerSandbox.prepare(install,source,viewer,false);
+        assertEquals("shader",Files.readString(viewer.resolve("shaderpacks/pack.zip")));
+        assertEquals("enableShaders=true\nshaderPack=pack.zip\n",Files.readString(viewer.resolve("config/iris.properties")));
+        Files.writeString(viewer.resolve("config/iris.properties"),"enableShaders=false\nshaderPack=pack.zip\n");ViewerSandbox.prepare(install,source,viewer,false);
+        assertEquals("enableShaders=false\nshaderPack=pack.zip\n",Files.readString(viewer.resolve("config/iris.properties")));
+        byte[] latin1="shaderPack=café.zip\n".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        Files.write(viewer.resolve("config/iris.properties"),latin1);ViewerSandbox.prepare(install,source,viewer,false);
+        assertArrayEquals(latin1,Files.readAllBytes(viewer.resolve("config/iris.properties")));
+    }
+    @Test void withoutPacksTheViewerKeepsShadersOff()throws Exception{
+        Path install=Files.createDirectory(temp.resolve("install")),source=install.resolve("instances/Sword Art Online"),viewer=temp.resolve("viewer");
+        Files.createDirectories(source.resolve("mods"));Files.createDirectories(source.resolve("shaderpacks"));Files.writeString(source.resolve("shaderpacks/pack.zip"),"shader");
+        Files.createDirectories(source.resolve("config"));Files.writeString(source.resolve("config/iris.properties"),"enableShaders=true\n");
+        ViewerSandbox.prepare(install,source,viewer,false,false);
+        assertFalse(Files.exists(viewer.resolve("shaderpacks/pack.zip")));assertEquals(ViewerSandbox.IRIS_DEFAULT,Files.readString(viewer.resolve("config/iris.properties")));
+    }
     @Test void refusesManagedOrUnownedWritableDirectories()throws Exception{
         Path install=Files.createDirectory(temp.resolve("install"));Path source=Files.createDirectories(install.resolve("instances/Sword Art Online/mods")).getParent();
         assertThrows(java.io.IOException.class,()->ViewerSandbox.prepare(install,source,source,false));
