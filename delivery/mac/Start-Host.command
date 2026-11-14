@@ -100,7 +100,9 @@ apply_update() {
   [ -n "$got" ] || { update_note "could not compute the checksum"; return 0; }
   [ "$got" = "$want" ] || { update_note "checksum mismatch, download discarded"; return 0; }
   echo "[4/5] Unpacking ..."
-  mkdir "$WORK/x" && unzip -q "$WORK/minecraft-handoff.zip" -d "$WORK/x" 2>/dev/null \
+  # unzip asks questions on the terminal when a file cannot be written. stdin is /dev/null so it stops
+  # instead of waiting for an answer, and its messages stay visible. Each unpacked file name is printed.
+  mkdir "$WORK/x" && unzip "$WORK/minecraft-handoff.zip" -d "$WORK/x" </dev/null \
     || { update_note "could not unpack the download"; return 0; }
   have="$(first_line "$WORK/x/VERSION")"
   [ "$have" = "$remote" ] || { update_note "the download is version ${have:-unknown}, not $remote"; return 0; }

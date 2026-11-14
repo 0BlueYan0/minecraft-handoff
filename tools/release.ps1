@@ -48,8 +48,12 @@ try {
   foreach ($name in $jars.Keys) { Copy-Item -LiteralPath $jars[$name] -Destination (Join-Path $stage "lib\$name") }
   Copy-Item -LiteralPath (Join-Path $root 'delivery\mac') -Destination (Join-Path $stage 'mac') -Recurse
   Copy-Item -LiteralPath (Join-Path $root 'delivery\windows') -Destination (Join-Path $stage 'windows') -Recurse
-  Copy-Item -LiteralPath (Join-Path $root 'delivery\README-繁體中文.md') -Destination (Join-Path $stage 'README-繁體中文.md')
+  Copy-Item -LiteralPath (Join-Path $root 'delivery\README-zh-TW.md') -Destination (Join-Path $stage 'README-zh-TW.md')
   [System.IO.File]::WriteAllText((Join-Path $stage 'VERSION'), "$Version`n", (New-Object System.Text.UTF8Encoding($false)))
+  # The unzip that ships with macOS ignores the zip UTF-8 name flag. 0.3.x had README-繁體中文.md, macOS refused
+  # the garbled name, and unzip waited at a hidden "Continue? (y/n)" prompt, so the Mac update never finished.
+  $nonAscii = Get-ChildItem -LiteralPath $stage -Recurse | Where-Object { $_.Name -match '[^\x20-\x7E]' }
+  if ($nonAscii) { throw "Package file names must be ASCII: $($nonAscii.Name -join ', ')" }
 
   # Shell and batch scripts need LF and CRLF line endings respectively, whatever the checkout used.
   foreach ($f in Get-ChildItem -LiteralPath (Join-Path $stage 'mac') -File) {
