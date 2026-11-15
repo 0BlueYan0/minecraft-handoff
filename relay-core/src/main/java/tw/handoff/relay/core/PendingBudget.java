@@ -10,4 +10,5 @@ public final class PendingBudget {
     }
     public synchronized void release(int bytes){if(bytes<0||packets<1||bytes>pending)throw new IllegalStateException("Relay budget underflow");packets--;pending-=bytes;}
     public synchronized long bytes(){return pending;}
+    public synchronized int packets(){return packets;}
 }

@@ -26,7 +26,7 @@ import net.minecraft.network.protocol.game.*;
 import net.minecraft.network.protocol.common.*;
 import net.minecraft.world.flag.FeatureFlags;
 import tw.handoff.relay.core.PeerLifecycle;
-import tw.handoff.relay.core.PendingBudget;
+import tw.handoff.relay.core.PacedOutbox;
 
 final class NativePeer implements InvocationHandler {
     final String id=UUID.randomUUID().toString();
@@ -35,7 +35,11 @@ final class NativePeer implements InvocationHandler {
     final tw.handoff.relay.core.JoinGate gate=new tw.handoff.relay.core.JoinGate();
     volatile JoinState join;
     final tw.handoff.relay.core.InputInbox inputs=new tw.handoff.relay.core.InputInbox(64);
-    final PendingBudget budget=new PendingBudget(2048,32L*1024*1024);
+    private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger("minecraft-handoff-relay");
+    /** In flight as before (2048 frames, 32 MB); a join snapshot may wait behind that up to 64 MB. */
+    final PacedOutbox outbox=new PacedOutbox(2048,32L*1024*1024,65_536,64L*1024*1024);
+    /** Frames and bytes handed to sendFrames, for the snapshot log line. */
+    final java.util.concurrent.atomic.AtomicLong offeredFrames=new java.util.concurrent.atomic.AtomicLong(),offeredBytes=new java.util.concurrent.atomic.AtomicLong();
     final Object listener;
     volatile ConnectionProtocol protocol=ConnectionProtocol.HANDSHAKING;
     volatile boolean live,closed;
@@ -56,7 +60,10 @@ final class NativePeer implements InvocationHandler {
         if(method.getReturnType()==ConnectionProtocol.class)return protocol;
         if(method.getReturnType()==boolean.class)return !closed&&connection.isConnected();
         if(method.getReturnType()==DisconnectionDetails.class)return new DisconnectionDetails(Component.literal("Relay connection closed"));
-        if(args!=null&&args.length==1&&args[0] instanceof DisconnectionDetails){closed=true;lifecycle.close();host.remove(this);return null;}
+        if(args!=null&&args.length==1&&args[0] instanceof DisconnectionDetails details){
+            if(!closed)LOG.info("Relay viewer disconnected: {}",details.reason().getString());
+            closed=true;live=false;lifecycle.close();host.remove(this);outbox.clear();return null;
+        }
         if(args!=null&&args.length>1&&args[0] instanceof Packet<?> && args[1] instanceof Exception){close("Invalid relay packet");return null;}
         if(args==null||args.length==0||!(args[0] instanceof Packet<?> packet))return null;
         try{handle(packet);}catch(Exception failure){close("Unsupported relay state: "+failure.getClass().getSimpleName());}
@@ -99,12 +106,27 @@ final class NativePeer implements InvocationHandler {
     void send(Packet<?> packet){if(closed)return;sendFrames(host.codec().freeze(packet));}
     void sendFrames(List<byte[]> frames){
         if(closed)return;
+        for(byte[] frame:frames){offeredFrames.incrementAndGet();offeredBytes.addAndGet(frame.length);}
+        // The outbox and the writes it hands out stay on the viewer channel's loop, so a frame released by a finished write never overtakes one offered earlier.
+        if(!channel.eventLoop().inEventLoop()){channel.eventLoop().execute(()->offer(frames));return;}
+        offer(frames);
+    }
+    private void offer(List<byte[]> frames){
         for(byte[] frame:frames){
-            if(!budget.reserve(frame.length)){close("Relay viewer is too slow; reconnect");return;}
-            try{channel.writeAndFlush(Unpooled.wrappedBuffer(frame)).addListener(future->budget.release(frame.length));}
-            catch(RuntimeException failure){budget.release(frame.length);close("Relay write failed");return;}
+            if(closed)return;
+            List<byte[]> now=outbox.offer(frame);
+            if(now==null){close("Relay viewer is too slow; reconnect");return;}
+            write(now);
         }
     }
+    private void write(List<byte[]> frames){
+        for(byte[] frame:frames){
+            if(closed)return;
+            try{channel.writeAndFlush(Unpooled.wrappedBuffer(frame)).addListener(future->written(frame.length));}
+            catch(RuntimeException failure){close("Relay write failed");return;}
+        }
+    }
+    private void written(int bytes){List<byte[]> next=outbox.written(bytes);if(!closed)write(next);}
     void tick(){
         if(closed)return;
         connection.tick();
@@ -114,6 +136,9 @@ final class NativePeer implements InvocationHandler {
     }
     void close(String reason){
         if(closed)return;closed=true;live=false;lifecycle.close();host.remove(this);
+        // Before clear, so the line shows what was waiting. A viewer closed outside PLAY or with a full socket gets no reason, only this line (2026-11-16).
+        LOG.info("Relay viewer closed: {} (in flight {} frames / {} bytes, queued {} frames / {} bytes)",reason,outbox.inFlightFrames(),outbox.inFlightBytes(),outbox.queuedFrames(),outbox.queuedBytes());
+        outbox.clear();
         // Never wait on a viewer socket from the original server's event loop.
         if(protocol==ConnectionProtocol.PLAY&&channel.isActive()&&channel.isWritable()){
             connection.send(new ClientboundDisconnectPacket(Component.literal(reason)),PacketSendListener.thenRun(()->channel.close()));

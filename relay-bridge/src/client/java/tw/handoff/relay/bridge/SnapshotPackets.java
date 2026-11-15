@@ -56,7 +56,7 @@ final class SnapshotPackets {
             var chunk=level.getChunkSource().getChunk(px+offset[0],pz+offset[1],ChunkStatus.FULL,false);
             if(chunk!=null){peer.send(new ClientboundLevelChunkWithLightPacket(chunk,level.getChunkSource().getLightEngine(),null,null));count++;}
         }
-        LOG.info("Snapshot sent {} of {} host chunks, radius {}",count,held.size(),radius);
+        LOG.info("Snapshot sent {} of {} host chunks, radius {}; {} frames / {} bytes to this viewer so far",count,held.size(),radius,peer.offeredFrames.get(),peer.offeredBytes.get());
         peer.send(new ClientboundChunkBatchFinishedPacket(count));
         if(count==0)throw new IllegalStateException("Host has no visible chunks");
         EntitySnapshot.entities(mc,peer);
