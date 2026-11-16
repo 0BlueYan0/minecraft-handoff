@@ -62,6 +62,32 @@ final class ViewerJoinState {
         this.overlay = overlay;
     }
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger("handoff-viewer");
+
+    /** Shape of each restored field (null, value, array or object size) for the log; values are game state and are never written. */
+    static String summary(JsonObject snapshot) {
+        JsonElement sections = snapshot.get("sections");
+        if (sections == null || !sections.isJsonObject()) return "no sections";
+        var out = new java.util.StringJoiner(" ");
+        for (var section : sections.getAsJsonObject().entrySet()) {
+            if (!section.getValue().isJsonObject()) {
+                out.add(section.getKey() + "=" + shape(section.getValue()));
+                continue;
+            }
+            for (var field : section.getValue().getAsJsonObject().entrySet()) out.add(section.getKey() + "." + field.getKey() + "=" + shape(field.getValue()));
+        }
+        JsonElement quests = snapshot.get("quests");
+        if (quests != null) out.add("quests=" + shape(quests));
+        return out.toString();
+    }
+
+    private static String shape(JsonElement value) {
+        if (value == null || value.isJsonNull()) return "null";
+        if (value.isJsonArray()) return "[" + value.getAsJsonArray().size() + "]";
+        if (value.isJsonObject()) return "{" + value.getAsJsonObject().size() + "}";
+        return "value";
+    }
+
     static String label(String piece) {
         return LABELS.getOrDefault(piece, piece);
     }
@@ -189,26 +215,33 @@ final class ViewerJoinState {
             if (!joined || generation != queuedIn) return;
         }
         Plan plan;
+        JsonObject restored = null;
         try {
             JsonObject root = JsonParser.parseString(new String(document, StandardCharsets.UTF_8)).getAsJsonObject();
             long age = root.get("ageNanos").getAsLong();
             JsonElement snapshot = root.get("snapshot");
             long waited = clock.getAsLong() - receivedAt;
             if (age < 0 || waited < 0 || snapshot == null || !snapshot.isJsonObject()) throw new IllegalArgumentException("Invalid snapshot document");
-            plan = preparer.prepare(snapshot.getAsJsonObject(), Math.addExact(age, waited));
+            restored = snapshot.getAsJsonObject();
+            plan = preparer.prepare(restored, Math.addExact(age, waited));
         } catch (IllegalArgumentException contract) {
-            reply(ControlWire.failed(contract.getMessage() != null && contract.getMessage().contains("contract") ? "version" : "snapshot"));
+            String piece = contract.getMessage() != null && contract.getMessage().contains("contract") ? "version" : "snapshot";
+            LOG.warn("Join state not applied: {} ({})", piece, contract.getClass().getSimpleName());
+            reply(ControlWire.failed(piece));
             return;
         } catch (Exception other) {
+            LOG.warn("Join state not applied: snapshot ({})", other.getClass().getSimpleName());
             reply(ControlWire.failed("snapshot"));
             return;
         }
         try {
             plan.apply();
         } catch (Exception failedApply) {
+            LOG.warn("Join state not applied: restore failed ({})", failedApply.getClass().getSimpleName());
             reply(ControlWire.failed("snapshot"));
             return;
         }
+        LOG.info("Join state applied: {}", summary(restored));
         reply(ControlWire.ack());
     }
 }

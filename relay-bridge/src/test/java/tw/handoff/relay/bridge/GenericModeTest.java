@@ -79,6 +79,24 @@ class GenericModeTest {
   assertEquals(0,translated(mux("saocore:translate","{\"op\":\"BUY\",\"data\":{}}")));
   assertEquals(0,translated(encode(new net.minecraft.network.protocol.game.ServerboundSwingPacket(net.minecraft.world.InteractionHand.MAIN_HAND))));
  }
+ static boolean byHost(net.minecraft.network.protocol.Packet<? super net.minecraft.network.protocol.game.ServerGamePacketListener> packet){
+  byte[] bytes=encode(packet);return PacketLab.sentByHost(PacketLab.decodeFrame(bytes,RegistryAccess.EMPTY));
+ }
+ @Test void chatAndCommandsAreSentByTheHostNotForwarded(){
+  assertTrue(byHost(new ServerboundChatCommandPacket("bp sao-menu")));
+  assertTrue(byHost(new net.minecraft.network.protocol.game.ServerboundChatPacket("hi",java.time.Instant.EPOCH,0L,null,new net.minecraft.network.chat.LastSeenMessages.Update(0,new java.util.BitSet()))));
+  assertFalse(byHost(payload("saocore:mux")));
+  assertFalse(byHost(new net.minecraft.network.protocol.game.ServerboundSwingPacket(net.minecraft.world.InteractionHand.MAIN_HAND)));
+ }
+ static String label(byte[] bytes){return PacketLab.viewerLabel(bytes,PacketLab.decodeFrame(bytes,RegistryAccess.EMPTY));}
+ @Test void diagnosticLabelNamesTheChannelNeverTheContent(){
+  assertEquals("saocore:mux/saoequipment:main",label(mux("saoequipment:main","{\"op\":\"OPEN\",\"secret\":\"x\"}")));
+  assertEquals("saojob:skills",label(encode(payload("saojob:skills"))));
+  assertEquals("chat_command",label(encode(new ServerboundChatCommandPacket("bp sao-menu"))));
+  assertEquals("saocore:mux/?",label(mux("evil\nline:x","{}")));
+  assertEquals("saocore:mux/?",label(mux("no colon","{}")));
+  assertEquals("saocore:mux/?",label(tw.handoff.relay.core.OpaqueFrames.payload(tw.handoff.relay.core.OpaqueFrames.readVarInt(encode(payload("x:y")),new int[]{0}),"saocore:mux",new byte[]{9})));
+ }
  @Test void chatAndLauncherStillBlocked(){
   assertFalse(admitted(new ServerboundChatCommandPacket("say hi")));
   assertFalse(admitted(payload("launcher:auth")));

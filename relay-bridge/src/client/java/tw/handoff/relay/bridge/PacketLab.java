@@ -34,7 +34,31 @@ final class PacketLab {
  static boolean allowedChannel(String channel){return OpaqueFrames.gameplayChannel(channel);}
  static boolean allowedPacket(Packet<?> packet){
   if(local(packet.type().id().getPath()))return false;
-  return !(packet instanceof ServerboundChatPacket||packet instanceof ServerboundChatCommandPacket||packet instanceof ServerboundChatCommandSignedPacket); // Signed-chat ownership is outside this bounded test.
+  return !sentByHost(packet);
+ }
+ /** Chat and commands from a viewer are re-sent by the host's own connection, which owns the chat session and signatures; the raw frame never goes upstream. */
+ static boolean sentByHost(Packet<?> packet){return packet instanceof ServerboundChatPacket||packet instanceof ServerboundChatCommandPacket||packet instanceof ServerboundChatCommandSignedPacket;}
+ /** Diagnostic name of a viewer packet: the payload channel (and SAO mux sub-channel) or the packet type. Never any content. */
+ static String viewerLabel(byte[] bytes,Packet<?> packet){
+  if(!(packet instanceof ServerboundCustomPayloadPacket))return packet.type().id().getPath();
+  var view=OpaqueFrames.inspect(bytes);
+  if(!view.channel().equals("saocore:mux"))return view.channel();
+  int at=view.dataOffset();if(at>=bytes.length)return "saocore:mux/?";
+  int n=bytes[at]&255;
+  if(n==0||n>bytes.length-at-1)return "saocore:mux/?";
+  String sub=new String(bytes,at+1,n,java.nio.charset.StandardCharsets.UTF_8);
+  return SUB_CHANNEL.matcher(sub).matches()?"saocore:mux/"+sub:"saocore:mux/?"; // Raw viewer bytes; only a name-shaped string may reach the log.
+ }
+ private static final java.util.regex.Pattern SUB_CHANNEL=java.util.regex.Pattern.compile("[a-z0-9_.-]+:[a-z0-9/._-]+");
+ private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger("minecraft-handoff-relay");
+ private final Set<String> seenViewer=java.util.concurrent.ConcurrentHashMap.newKeySet();
+ /** Logs the first packet of each kind a viewer sends, and whether it went upstream, so a menu that does nothing can be traced. */
+ private void seen(byte[] bytes,Packet<?> packet,boolean forwarded){
+  try{
+   if(seenViewer.size()>=256){if(seenViewer.add("!limit"))LOG.info("Viewer packet log limit reached; later kinds are not logged");return;}
+   String label;try{label=viewerLabel(bytes,packet);}catch(RuntimeException unreadable){label=packet.type().id().getPath();}
+   if(seenViewer.add((forwarded?"+":"-")+label))LOG.info(forwarded?"Viewer sends {}":"Viewer packet not forwarded: {}",label);
+  }catch(RuntimeException logging){} // A diagnostic must never stop an admitted packet from going upstream.
  }
  static boolean local(String name){return LOCAL.contains(name)||name.contains("cookie")||name.contains("configuration");}
  void install(){
@@ -80,7 +104,8 @@ final class PacketLab {
  @SuppressWarnings("unchecked") void forward(String encoded,net.minecraft.core.RegistryAccess.Frozen registries,java.util.function.Supplier<net.minecraft.client.player.LocalPlayer> localPlayer){
   byte[] bytes=Base64.getDecoder().decode(encoded);if(bytes.length>16000)throw new IllegalArgumentException("Lab frame too large");
   Packet<?> packet=decodeFrame(bytes,registries);
-  if(!admit(bytes,packet))return;
+  boolean admitted=admit(bytes,packet);seen(bytes,packet,admitted);
+  if(!admitted)return;
   if(packet instanceof ServerboundMovePlayerPacket)diag.moves.incrementAndGet();
   if(packet instanceof ServerboundMovePlayerPacket move&&localPlayer.get()!=null){var p=localPlayer.get();p.setPos(move.getX(p.getX()),move.getY(p.getY()),move.getZ(p.getZ()));p.setYRot(move.getYRot(p.getYRot()));p.setXRot(move.getXRot(p.getXRot()));}
   channel.writeAndFlush(Unpooled.wrappedBuffer(bytes));

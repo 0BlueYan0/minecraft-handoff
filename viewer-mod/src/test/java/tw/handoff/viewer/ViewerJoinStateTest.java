@@ -31,6 +31,17 @@ class ViewerJoinStateTest {
         state = new ViewerJoinState(sent::add, (s, e) -> preparer.prepare(s, e), gameQueue::add, () -> clock, overlays::add);
     }
 
+    @Test
+    void summaryGivesShapesOnlyNeverValues() {
+        JsonObject snapshot = com.google.gson.JsonParser.parseString(
+                "{\"sections\":{\"equipment\":{\"state\":null,\"lists\":{\"a\":1,\"b\":2},\"listSlot\":\"secret-slot\"},"
+                        + "\"mux\":{\"SERVED\":[\"x\",\"y\",\"z\"],\"sendable\":null}},\"quests\":[1,2],\"timers\":{}}").getAsJsonObject();
+        String summary = ViewerJoinState.summary(snapshot);
+        assertEquals("equipment.state=null equipment.lists={2} equipment.listSlot=value mux.SERVED=[3] mux.sendable=null quests=[2]", summary);
+        assertFalse(summary.contains("secret"));
+        assertEquals("no sections", ViewerJoinState.summary(new JsonObject()));
+    }
+
     private void hostReady() {
         assertFalse(state.receive("HANDOFF2:R:0", 0)); // R: is also handled by ViewerClient, so the join state reports it as not consumed.
     }
