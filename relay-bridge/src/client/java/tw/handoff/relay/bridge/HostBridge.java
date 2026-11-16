@@ -28,7 +28,7 @@ public final class HostBridge {
     private volatile FrameCodec codec;
     final tw.handoff.relay.core.SaoReplayTable table;
     private final int payloadId;
-    private static final java.util.Set<String> TABLE_CHANNELS=java.util.Set.of("saocore:mux","capuodev:quest_hud","saoblessing:main");
+    private static final java.util.Set<String> TABLE_CHANNELS=java.util.Set.of("saocore:mux","capuodev:quest_hud","saoblessing:main",tw.handoff.relay.core.ZapAudioUrl.CHANNEL);
     private final Channel upstream;
     private NativeFrontend frontend;
     private RemoteControl control;
@@ -177,6 +177,16 @@ public final class HostBridge {
     }
     void ready(NativePeer peer){if(stopped)return;if(!peer.closed&&peer.lifecycle.claimReadyNotification()){LOG.info("Relay viewer world ready");control.ready(peer);}}
     void input(NativePeer peer,Packet<?> packet){control.input(peer,packet);}
+    /** The host is usually attached after login, when the audio mod's music link has already gone by; its stored copy is replayed instead. The link carries an audio token, so it is never logged. Runs on the game thread, where the audio mod writes the link. */
+    private void offerMusicLink(){
+        if(table.hasMusicLink())return;
+        try{
+            Object stored=Class.forName("fr.saofr.zapaudio.client.ZapAudioClient",false,minecraft.getClass().getClassLoader()).getMethod("getAudioUrl").invoke(null);
+            var url=tw.handoff.relay.core.ZapAudioUrl.forViewer(stored instanceof String s?s:null);
+            if(url.isPresent()){table.observe(tw.handoff.relay.core.ZapAudioUrl.frame(payloadId,url.get()));LOG.info(table.hasMusicLink()?"Music link from the audio mod will be replayed to the viewer":"Music link not available: replay table is over its budget");}
+            else LOG.info("Music link not available: the audio mod has {}",stored==null?"none":"a link the viewer cannot use");
+        }catch(ReflectiveOperationException|RuntimeException|LinkageError missing){LOG.info("Music link not available: {}",missing.getClass().getSimpleName());}
+    }
     void snapshot(NativePeer peer){
         if(stopped){peer.close("Host updating; reconnect");return;}
         upstream.eventLoop().execute(()->{
@@ -186,7 +196,7 @@ public final class HostBridge {
             ReadPause pause=new ReadPause(()->upstream.eventLoop().execute(()->{if(upstream.isActive())upstream.config().setAutoRead(true);}));pauses.add(pause);if(stopped)pause.close(); // shutdown may have iterated pauses just before this one was added
             var timeout=upstream.eventLoop().schedule(()->{if(pause.active()){peer.close("Host snapshot is busy; reconnect");pause.close();}},2,java.util.concurrent.TimeUnit.SECONDS);
             var join=new JoinState(peer.gate,table,payloadId,new JoinState.Ports(
-                ()->{SnapshotPackets.send(this,peer);if(lab!=null&&lab.hasJournal())lab.replay(peer);}, // PRODUCTION keeps no journal, so full history is never replayed.
+                ()->{offerMusicLink();SnapshotPackets.send(this,peer);if(lab!=null&&lab.hasJournal())lab.replay(peer);}, // PRODUCTION keeps no journal, so full history is never replayed.
                 ()->net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.getSendable().stream().map(Object::toString).toList(),
                 frame->peer.sendFrames(List.of(frame)),
                 text->peer.send(RemoteControl.message(text)),

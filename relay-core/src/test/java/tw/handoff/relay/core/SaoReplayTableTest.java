@@ -38,6 +38,13 @@ class SaoReplayTableTest {
   t.observe(questMux(1,"*",""));
   same(t.replay().frames());
  }
+ @Test void musicLinkKeepsOnlyTheLatest(){
+  var t=new SaoReplayTable(ID,1<<20);
+  assertFalse(t.hasMusicLink());
+  byte[] a=ZapAudioUrl.frame(ID,"https://a.test?n=1"),b=ZapAudioUrl.frame(ID,"https://a.test?n=2");
+  t.observe(a);assertTrue(t.hasMusicLink());t.observe(b);
+  same(t.replay().frames(),b);
+ }
  @Test void questHudDirectAndMuxShareKey(){
   var t=new SaoReplayTable(ID,1<<20);
   byte[] direct=questDirect(0,"a","v1"),mux=questMux(0,"a","v2");

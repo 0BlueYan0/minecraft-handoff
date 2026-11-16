@@ -9,6 +9,7 @@ import java.util.*;
 public final class SaoReplayTable {
  public record Replay(List<byte[]> frames,Set<String> missing){}
  private static final int BLESSING_LIMIT=256;
+ private static final String MUSIC="zapaudio:url";
  private static final Set<String> GUI_SINGLE=Set.of("SHIELD_UPDATE","SKILL_VARIANT","SETTINGS","UI_STYLE","PROJECTION_LIST");
  private record Entry(long seq,byte[] frame){}
  private final int customPayloadPacketId,maxBytes;
@@ -38,6 +39,9 @@ public final class SaoReplayTable {
   return new Replay(frames,Collections.unmodifiableSet(missing));
  }
 
+ /** The music link is sent once at login, so a host attached later has to supply it from the audio mod's copy. */
+ public synchronized boolean hasMusicLink(){return keyed.containsKey(MUSIC);}
+
  /** The host saw a frame on a table channel that it could not record; it is never recoverable on this connection. */
  public synchronized void markSkipped(){skipped=true;}
 
@@ -55,6 +59,7 @@ public final class SaoReplayTable {
    case "saocore:mux"->applyMux(frame,data);
    case "capuodev:quest_hud"->applyQuest(frame,data);
    case "saoblessing:main"->applyBlessing(frame,data);
+   case ZapAudioUrl.CHANNEL->put(frame,MUSIC);
    default->{}
   }
  }
